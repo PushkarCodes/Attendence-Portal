@@ -1,0 +1,1931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Attendance & Live Excel Sheet</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS for real .xlsx & .csv file exports/uploads -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Google Font: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+
+    /* Excel-style table gridlines */
+    .excel-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 12px;
+    }
+    .excel-table th,
+    .excel-table td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 8px;
+      white-space: nowrap;
+    }
+    .excel-table thead th {
+      background-color: #107c41; /* Classic Excel Green */
+      color: #ffffff;
+      font-weight: 700;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .excel-col-letters th {
+      background-color: #e2e8f0 !important;
+      color: #475569 !important;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 6px;
+      border: 1px solid #cbd5e1;
+    }
+
+    /* Sticky left columns in Excel view */
+    .sticky-col-1 {
+      position: sticky;
+      left: 0;
+      z-index: 5;
+      background-color: #f8fafc;
+    }
+    .sticky-col-2 {
+      position: sticky;
+      left: 78px;
+      z-index: 5;
+      background-color: #ffffff;
+    }
+    .excel-table thead .sticky-col-1,
+    .excel-table thead .sticky-col-2 {
+      z-index: 20;
+      background-color: #0b5c2f;
+    }
+
+    /* Shake animation for invalid password */
+    @keyframes shakeError {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+    .animate-shake {
+      animation: shakeError 0.35s ease-in-out;
+    }
+
+    /* Blur & hide workspace when locked */
+    body.is-locked #appWorkspace {
+      filter: blur(14px);
+      pointer-events: none;
+      user-select: none;
+      overflow: hidden;
+      max-height: 100vh;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col is-locked">
+
+  <!-- ========================================================= -->
+  <!-- FULL-SCREEN PASSWORD LOCK GATE (SECURITY OVERLAY)         -->
+  <!-- ========================================================= -->
+  <div id="lockScreenOverlay" class="fixed inset-0 z-50 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4">
+    <div id="lockCard" class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+      <!-- Top Security Banner -->
+      <div class="bg-slate-900 px-6 py-6 text-center relative">
+        <div class="w-14 h-14 rounded-2xl bg-[#107c41] text-white flex items-center justify-center mx-auto mb-3 shadow-lg">
+          <i class="fa-solid fa-shield-halved text-2xl"></i>
+        </div>
+        <h2 class="text-lg font-extrabold text-white tracking-tight">Protected Attendance Portal</h2>
+        <p class="text-xs text-slate-400 mt-1">Enter your security PIN or password to view staff sheet</p>
+      </div>
+
+      <!-- Unlock Form -->
+      <form onsubmit="handleUnlockSubmit(event)" class="p-6 space-y-4">
+        <div>
+          <label for="unlockPasswordInput" class="block text-xs font-bold text-slate-700 mb-1.5">
+            Security Password
+          </label>
+          <div class="relative">
+            <input
+              type="password"
+              id="unlockPasswordInput"
+              placeholder="Enter access password"
+              autocomplete="current-password"
+              required
+              class="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#107c41] focus:border-transparent"
+            />
+            <button
+              type="button"
+              onclick="togglePasswordVisibility('unlockPasswordInput', 'unlockEyeIcon')"
+              class="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-700 transition"
+              title="Show / Hide Password"
+            >
+              <i id="unlockEyeIcon" class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+          <!-- Error Message -->
+          <p id="unlockErrorMsg" class="hidden text-xs font-bold text-rose-600 mt-2 flex items-center gap-1.5">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span>Incorrect password. Please try again.</span>
+          </p>
+        </div>
+
+        <button
+          type="submit"
+          class="w-full py-2.5 px-4 rounded-xl bg-[#107c41] hover:bg-[#0c5e31] text-white text-xs font-extrabold uppercase tracking-wider transition shadow-md flex items-center justify-center gap-2"
+        >
+          <i class="fa-solid fa-unlock-keyhole"></i>
+          <span>Unlock Portal</span>
+        </button>
+
+        <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
+          <span><i class="fa-solid fa-lock text-emerald-600 mr-1"></i>SHA-256 Local Protection</span>
+          <span>Auto-locks after 5m idle</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- SETTINGS, UI MODE & SECURITY MODAL                        -->
+  <!-- ========================================================= -->
+  <div id="securityModal" class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-sliders text-emerald-400 text-lg"></i>
+          <div>
+            <h3 class="text-sm font-extrabold">Settings: UI Operation Format, Password &amp; Backup</h3>
+            <p class="text-[11px] text-slate-400">Choose which attendance recording UI you want to operate, cell format, and security</p>
+          </div>
+        </div>
+        <button onclick="closeSecurityModal()" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-5 max-h-[82vh] overflow-y-auto">
+
+        <!-- 1. UI OPERATION MODE SELECTOR (CHOOSE WHICH UI TO OPERATE) -->
+        <div class="p-4 rounded-xl border-2 border-indigo-200 bg-indigo-50/40 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-display text-indigo-600"></i>
+                <span>1. Choose Attendance Recording UI Mode</span>
+              </h4>
+              <p class="text-[11px] text-slate-600 mt-0.5">Select which interface you want to operate for marking daily attendance</p>
+            </div>
+            <span id="activeUiModeBadge" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-600 text-white">Split View</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <!-- Mode 1: Daily Button Cards UI -->
+            <button
+              type="button"
+              id="settingUiModeCards"
+              onclick="setUiOperationMode('CARDS')"
+              class="p-3 rounded-xl border-2 text-left transition flex flex-col justify-between gap-2 bg-white hover:border-indigo-400"
+            >
+              <div>
+                <div class="flex items-center justify-between">
+                  <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
+                    <i class="fa-solid fa-list-check"></i>
+                  </span>
+                  <span class="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Mode 1</span>
+                </div>
+                <div class="text-xs font-extrabold text-slate-900 mt-2">Daily Button Cards UI</div>
+                <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">Focus only on 1-click daily employee buttons. Hides the big bottom Excel grid until needed.</p>
+              </div>
+              <div class="text-[10px] font-bold text-indigo-600 flex items-center gap-1">
+                <span>Select Mode 1</span> <i class="fa-solid fa-arrow-right text-[9px]"></i>
+              </div>
+            </button>
+
+            <!-- Mode 2: Direct Excel Sheet Grid UI -->
+            <button
+              type="button"
+              id="settingUiModeExcel"
+              onclick="setUiOperationMode('EXCEL')"
+              class="p-3 rounded-xl border-2 text-left transition flex flex-col justify-between gap-2 bg-white hover:border-emerald-500"
+            >
+              <div>
+                <div class="flex items-center justify-between">
+                  <span class="w-7 h-7 rounded-lg bg-emerald-100 text-[#107c41] flex items-center justify-center text-xs font-bold">
+                    <i class="fa-solid fa-table-cells"></i>
+                  </span>
+                  <span class="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Mode 2</span>
+                </div>
+                <div class="text-xs font-extrabold text-slate-900 mt-2">Direct Excel Sheet UI</div>
+                <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">Hides daily cards. Record attendance directly inside the Live Excel Sheet Grid by clicking cells.</p>
+              </div>
+              <div class="text-[10px] font-bold text-[#107c41] flex items-center gap-1">
+                <span>Select Mode 2</span> <i class="fa-solid fa-arrow-right text-[9px]"></i>
+              </div>
+            </button>
+
+            <!-- Mode 3: Split View (Both Together) -->
+            <button
+              type="button"
+              id="settingUiModeSplit"
+              onclick="setUiOperationMode('SPLIT')"
+              class="p-3 rounded-xl border-2 text-left transition flex flex-col justify-between gap-2 bg-white hover:border-slate-500"
+            >
+              <div>
+                <div class="flex items-center justify-between">
+                  <span class="w-7 h-7 rounded-lg bg-slate-200 text-slate-800 flex items-center justify-center text-xs font-bold">
+                    <i class="fa-solid fa-table-columns"></i>
+                  </span>
+                  <span class="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Mode 3</span>
+                </div>
+                <div class="text-xs font-extrabold text-slate-900 mt-2">Split View (Both UIs)</div>
+                <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">Shows both the Daily Button Cards on top and the Live Excel Sheet Grid below together.</p>
+              </div>
+              <div class="text-[10px] font-bold text-slate-700 flex items-center gap-1">
+                <span>Select Mode 3</span> <i class="fa-solid fa-arrow-right text-[9px]"></i>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. EXCEL CELL DISPLAY & EXPORT FORMAT -->
+        <div class="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-spell-check text-[#107c41]"></i>
+                <span>2. Excel Sheet &amp; Export Text Format</span>
+              </h4>
+              <p class="text-[11px] text-slate-500">Choose whether the Excel sheet displays full words or short status codes</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <button
+              type="button"
+              id="settingFormatFullBtn"
+              onclick="setExportFormatMode('FULL')"
+              class="p-2.5 rounded-xl border-2 text-left transition flex items-center justify-between"
+            >
+              <div>
+                <div class="text-xs font-extrabold text-slate-900">Full Words Format</div>
+                <div class="text-[11px] text-slate-500">Present, Work From Home, Absent, Half Day, Leave</div>
+              </div>
+              <i class="fa-solid fa-circle-check text-sm"></i>
+            </button>
+
+            <button
+              type="button"
+              id="settingFormatCodeBtn"
+              onclick="setExportFormatMode('CODE')"
+              class="p-2.5 rounded-xl border-2 text-left transition flex items-center justify-between"
+            >
+              <div>
+                <div class="text-xs font-extrabold text-slate-900">Short Letters Format</div>
+                <div class="text-[11px] text-slate-500">P, WFH, A, HD, PL</div>
+              </div>
+              <i class="fa-solid fa-circle-check text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Change Password Form -->
+        <form onsubmit="handleChangePassword(event)" class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div class="flex items-center justify-between">
+            <h4 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-key text-indigo-600"></i>
+              <span>3. Change Access Password</span>
+            </h4>
+            <span id="passwordStatusBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Password Protected</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 mb-1">Current Password</label>
+              <input
+                type="password"
+                id="currentPwdInput"
+                placeholder="Enter current password"
+                required
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 mb-1">New Password</label>
+              <input
+                type="password"
+                id="newPwdInput"
+                placeholder="New password (min 4 chars)"
+                required
+                minlength="4"
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-[11px] text-slate-500">Protected with SHA-256 local encryption</span>
+            <button type="submit" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition">
+              Update Password
+            </button>
+          </div>
+        </form>
+
+        <!-- 4. Auto-Lock Inactivity Setting -->
+        <div class="p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+              <i class="fa-solid fa-clock-rotate-left text-emerald-600"></i>
+              <span>Auto-Lock When Away From Desk</span>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5">Automatically locks the screen after 5 minutes of no mouse or keyboard activity. You can also press <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px] font-mono font-bold">Alt + L</kbd> anytime to lock instantly.</p>
+          </div>
+          <label class="inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="autoLockToggle" onchange="toggleAutoLockSetting(this.checked)" checked class="sr-only peer" />
+            <div class="w-10 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all relative peer-checked:bg-[#107c41]"></div>
+          </label>
+        </div>
+
+        <!-- 5. Local Data Backup & Restore (.json) -->
+        <div class="p-4 rounded-xl border border-slate-200 space-y-2.5 bg-emerald-50/40">
+          <div class="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+            <i class="fa-solid fa-shield-heart text-[#107c41]"></i>
+            <span>Safe Data Backup &amp; Restore</span>
+          </div>
+          <p class="text-[11px] text-slate-600">Save a backup file to your PC so your attendance data is 100% safe even if browser history is cleared.</p>
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              onclick="exportBackupJson()"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#107c41] hover:bg-[#0c5e31] text-white text-xs font-bold transition"
+            >
+              <i class="fa-solid fa-download"></i>
+              <span>Download Backup (.json)</span>
+            </button>
+
+            <label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-bold cursor-pointer transition">
+              <i class="fa-solid fa-upload text-indigo-600"></i>
+              <span>Restore from Backup File</span>
+              <input type="file" accept=".json" onchange="importBackupJson(event)" class="hidden" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- PROTECTED APP WORKSPACE                                   -->
+  <!-- ========================================================= -->
+  <div id="appWorkspace" class="min-h-screen flex flex-col">
+
+  <!-- ========================================================= -->
+  <!-- TOP BAR: MONTH SELECTOR, UI SWITCHER & EXPORT/SECURITY    -->
+  <!-- ========================================================= -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Brand + Month/Year Selector -->
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-lg bg-[#107c41] text-white flex items-center justify-center font-bold shadow-xs">
+            <i class="fa-solid fa-file-excel text-lg"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <h1 class="text-base font-extrabold text-slate-900 leading-tight">Attendance Sheet Maker</h1>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold" title="Protected with Password & Auto-Lock">
+                <i class="fa-solid fa-lock text-[9px]"></i> Secured
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-500 font-medium">Auto-saves in browser &bull; Zero formulas to break</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <select id="monthSelect" onchange="handlePeriodChange()" class="bg-white px-2.5 py-1.5 rounded-md text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none">
+            <option value="0">January</option>
+            <option value="1">February</option>
+            <option value="2">March</option>
+            <option value="3">April</option>
+            <option value="4">May</option>
+            <option value="5">June</option>
+            <option value="6">July</option>
+            <option value="7">August</option>
+            <option value="8">September</option>
+            <option value="9">October</option>
+            <option value="10">November</option>
+            <option value="11">December</option>
+          </select>
+          <select id="yearSelect" onchange="handlePeriodChange()" class="bg-white px-2.5 py-1.5 rounded-md text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none">
+          </select>
+        </div>
+
+        <!-- Quick Header UI Mode Switcher -->
+        <div class="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-[11px]" title="Switch which UI you want to operate">
+          <button
+            type="button"
+            id="headerUiCardsBtn"
+            onclick="setUiOperationMode('CARDS')"
+            class="px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1"
+          >
+            <i class="fa-solid fa-list-check"></i>
+            <span>Daily Buttons</span>
+          </button>
+          <button
+            type="button"
+            id="headerUiExcelBtn"
+            onclick="setUiOperationMode('EXCEL')"
+            class="px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1"
+          >
+            <i class="fa-solid fa-table-cells"></i>
+            <span>Excel Grid</span>
+          </button>
+          <button
+            type="button"
+            id="headerUiSplitBtn"
+            onclick="setUiOperationMode('SPLIT')"
+            class="px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1"
+          >
+            <i class="fa-solid fa-table-columns"></i>
+            <span>Both (Split)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Primary Action Buttons + Settings & Security Controls -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="copySheetForExcel()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs">
+          <i class="fa-regular fa-copy"></i>
+          <span>Copy Sheet</span>
+        </button>
+
+        <button onclick="downloadExcelFile()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#107c41] hover:bg-[#0c5e31] text-white text-xs font-bold transition shadow-xs">
+          <i class="fa-solid fa-download"></i>
+          <span>Download .XLSX</span>
+        </button>
+
+        <button onclick="downloadCSVFile()" class="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition">
+          <i class="fa-solid fa-file-csv"></i>
+          <span>.CSV</span>
+        </button>
+
+        <div class="h-5 w-[1px] bg-slate-200 mx-0.5 hidden sm:block"></div>
+
+        <!-- Settings (UI Format + Password + Backup) Button -->
+        <button
+          onclick="openSecurityModal()"
+          title="Settings: Choose UI Mode, Format & Password"
+          class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-extrabold transition"
+        >
+          <i class="fa-solid fa-sliders text-indigo-600"></i>
+          <span>Settings &amp; UI</span>
+        </button>
+
+        <!-- 1-Click Boss Key / Lock Screen Now Button -->
+        <button
+          onclick="lockPortalNow('Screen locked')"
+          title="Instant Lock Screen (Shortcut: Alt + L)"
+          class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold transition shadow-xs"
+        >
+          <i class="fa-solid fa-lock"></i>
+          <span>Lock Now</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ========================================================= -->
+  <!-- MAIN WORKSPACE: ADAPTS TO SELECTED UI OPERATION MODE      -->
+  <!-- ========================================================= -->
+  <main class="max-w-7xl w-full mx-auto px-4 py-5 space-y-5 flex-1">
+
+    <!-- COLLAPSIBLE DRAWER IN EXCEL-ONLY MODE FOR ADDING/UPLOADING STAFF -->
+    <div id="excelModeStaffBar" class="hidden bg-white rounded-xl border border-slate-200 px-4 py-2.5 items-center justify-between gap-3 shadow-2xs">
+      <div class="flex items-center gap-2 text-xs font-bold text-slate-700">
+        <i class="fa-solid fa-table-cells text-[#107c41]"></i>
+        <span>Operating in <strong>Direct Excel Sheet Grid UI</strong> &bull; Click any day cell below to mark attendance or use the quick-fill bar.</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          onclick="toggleStaffDrawerInExcelMode()"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-extrabold transition"
+        >
+          <i class="fa-solid fa-user-plus"></i>
+          <span id="excelStaffToggleText">Add / Upload Employees (Auto EMP-ID)</span>
+        </button>
+        <button
+          type="button"
+          onclick="setUiOperationMode('CARDS')"
+          class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+        >
+          <i class="fa-solid fa-list-check"></i>
+          <span>Switch to Daily Buttons UI</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TOP GRID: LEFT = DAILY ATTENDANCE CARDS, RIGHT = ADD/UPLOAD STAFF (AUTO EMP ID) -->
+    <div id="topDailyAndStaffGrid" class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+      <!-- ======================================================= -->
+      <!-- SECTION 1 (LEFT 8 COLS): MARK TODAY'S ATTENDANCE CARDS  -->
+      <!-- ======================================================= -->
+      <section id="dailyCardsSection" class="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+        
+        <!-- Section Header with Date Picker & 1-Click Mark All -->
+        <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">1</span>
+            <div>
+              <h2 class="text-sm font-extrabold text-slate-900">Mark Daily Attendance (Button Cards UI)</h2>
+              <p class="text-[11px] text-slate-500">Pick a date and click a status button for each employee</p>
+            </div>
+          </div>
+
+          <!-- Date Picker -->
+          <div class="flex items-center gap-1.5">
+            <button onclick="shiftDay(-1)" class="p-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs" title="Previous Day">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input
+              type="date"
+              id="dailyDatePicker"
+              onchange="handleDatePickerChange(this.value)"
+              class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button onclick="shiftDay(1)" class="p-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs" title="Next Day">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button onclick="jumpToToday()" class="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold">
+              Today
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Bar: Selected Date Label + 1-Click Mark All Present / WFH -->
+        <div class="px-4 py-2.5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <div class="text-xs font-bold text-slate-700 flex items-center gap-2">
+            <i class="fa-regular fa-calendar-check text-indigo-600"></i>
+            <span id="selectedDateReadable">Loading date...</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button onclick="markAllForSelectedDay('P')" class="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition">
+              Mark All Present
+            </button>
+            <button onclick="markAllForSelectedDay('WFH')" class="px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition">
+              Mark All Work From Home
+            </button>
+            <button onclick="markAllForSelectedDay('')" class="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-semibold transition">
+              Clear Day
+            </button>
+          </div>
+        </div>
+
+        <!-- Employee Attendance Rows -->
+        <div class="divide-y divide-slate-200 max-h-[420px] overflow-y-auto" id="dailyEmployeeList">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- ======================================================= -->
+      <!-- SECTION 2 (RIGHT 4 COLS): ADD / UPLOAD STAFF (AUTO ID)  -->
+      <!-- ======================================================= -->
+      <section id="staffAddUploadSection" class="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+        <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">2</span>
+            <div>
+              <h2 class="text-sm font-extrabold text-slate-900">Add / Upload Employees</h2>
+              <p class="text-[11px] text-slate-500">Emp ID (<code class="font-bold text-indigo-700">EMP-001</code>...) is 100% automatic</p>
+            </div>
+          </div>
+          <span id="nextAutoIdBadge" class="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[11px] font-extrabold">Next: EMP-006</span>
+        </div>
+
+        <div class="p-4 space-y-4 flex-1 flex flex-col justify-between">
+          
+          <!-- Single Add Form (No Emp ID typing needed) -->
+          <form onsubmit="addSingleEmployee(event)" class="space-y-2.5">
+            <div class="text-xs font-bold text-slate-700">Quick Add One Person</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="text"
+                id="singleEmpName"
+                placeholder="Employee Name *"
+                required
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <input
+                type="text"
+                id="singleEmpWork"
+                placeholder="Work / Department *"
+                required
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <button type="submit" class="w-full py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-plus"></i>
+              <span>Add Employee (Auto-Assigns Emp ID)</span>
+            </button>
+          </form>
+
+          <!-- Divider -->
+          <div class="relative flex py-1 items-center">
+            <div class="flex-grow border-t border-slate-200"></div>
+            <span class="flex-shrink mx-2 text-[10px] font-bold uppercase text-slate-400">OR BULK UPLOAD NAMES &amp; WORK</span>
+            <div class="flex-grow border-t border-slate-200"></div>
+          </div>
+
+          <!-- Bulk Paste or Upload CSV/Excel -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold text-slate-700">Paste or Upload Staff List</label>
+              <label class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold cursor-pointer transition border border-indigo-200">
+                <i class="fa-solid fa-upload"></i>
+                <span>Upload Excel/CSV</span>
+                <input type="file" accept=".csv,.xlsx,.xls,.txt" onchange="handleStaffFileUpload(event)" class="hidden" />
+              </label>
+            </div>
+
+            <textarea
+              id="bulkStaffText"
+              rows="3"
+              placeholder="Paste Name, Work (one per line):&#10;Rahul Verma, Sales&#10;Neha Sharma, HR&#10;Amit Patel, Accounts"
+              class="w-full p-2.5 rounded-lg border border-slate-300 text-xs font-mono bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            ></textarea>
+
+            <div class="flex items-center justify-between gap-2">
+              <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-600 font-medium cursor-pointer">
+                <input type="checkbox" id="replaceAllStaffCheckbox" class="rounded accent-indigo-600" />
+                <span>Replace existing list</span>
+              </label>
+
+              <button onclick="importBulkStaff()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition">
+                Import &amp; Auto-Create IDs
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- SECTION 3: LIVE EXCEL SPREADSHEET FILE VIEW (ON SCREEN!)  -->
+    <!-- ========================================================= -->
+    <section id="liveExcelSection" class="bg-white rounded-xl border-2 border-[#107c41] shadow-md overflow-hidden">
+      
+      <!-- Excel Toolbar -->
+      <div class="bg-[#107c41] text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-table-cells text-lg"></i>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm sm:text-base font-extrabold" id="excelFileTitle">Attendance_Sheet_Nov_2026.xlsx</h2>
+              <span class="px-2 py-0.5 rounded bg-white/20 text-[10px] font-bold uppercase tracking-wider">Direct Excel Sheet UI</span>
+            </div>
+            <p class="text-[11px] text-emerald-100">Click any cell in the sheet below to cycle status (Present &rarr; Work From Home &rarr; Absent &rarr; Half Day &rarr; Leave) or use the quick date bar.</p>
+          </div>
+        </div>
+
+        <!-- Format Switcher: Full Words vs Short Codes + Export Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Toggle Full Words vs Short Codes -->
+          <div class="flex items-center bg-black/20 p-1 rounded-lg text-xs">
+            <button
+              id="modeFullBtn"
+              onclick="setExportFormatMode('FULL')"
+              class="px-2.5 py-1 rounded-md font-bold transition bg-white text-[#107c41]"
+            >
+              Full Words (Present, Work From Home)
+            </button>
+            <button
+              id="modeCodeBtn"
+              onclick="setExportFormatMode('CODE')"
+              class="px-2.5 py-1 rounded-md font-bold transition text-white hover:bg-white/10"
+            >
+              Short Letters (P, WFH, A)
+            </button>
+          </div>
+
+          <button onclick="copySheetForExcel()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-[#107c41] hover:bg-emerald-50 text-xs font-extrabold shadow-xs transition">
+            <i class="fa-regular fa-copy"></i>
+            <span>Copy Table for Excel</span>
+          </button>
+
+          <button onclick="downloadExcelFile()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow-xs transition">
+            <i class="fa-solid fa-file-arrow-down"></i>
+            <span>Download .XLSX</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Direct Excel Quick-Fill Bar (Allows 1-click marking for any date right inside the Excel Grid UI) -->
+      <div class="bg-emerald-50/70 border-b border-emerald-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-extrabold text-emerald-950 flex items-center gap-1.5">
+            <i class="fa-solid fa-wand-magic-sparkles text-[#107c41]"></i>
+            <span>Excel Quick-Fill Date:</span>
+          </span>
+          <input
+            type="date"
+            id="excelQuickDatePicker"
+            onchange="handleDatePickerChange(this.value)"
+            class="px-2 py-1 rounded border border-emerald-300 bg-white text-xs font-bold text-slate-900"
+          />
+          <button onclick="markAllForSelectedDay('P')" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition">
+            All Present
+          </button>
+          <button onclick="markAllForSelectedDay('WFH')" class="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition">
+            All Work From Home
+          </button>
+          <button onclick="markAllForSelectedDay('')" class="px-2 py-1 rounded bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-semibold transition">
+            Clear Selected Date
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+          <span>Click any cell to record:</span>
+          <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900">Present</span>
+          <span class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-900">Work From Home</span>
+          <span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-900">Absent</span>
+          <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">Half Day</span>
+          <span class="px-1.5 py-0.5 rounded bg-sky-100 text-sky-900">Leave</span>
+        </div>
+      </div>
+
+      <!-- Excel Formula Bar Lookalike -->
+      <div class="bg-slate-100 border-b border-slate-300 px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-slate-700">A1:AN20</span>
+          <span class="italic text-slate-400 font-serif font-bold">fx</span>
+          <span class="font-medium text-slate-700">Payable Days = Present + Work From Home + Leave + (0.5 &times; Half Day)</span>
+        </div>
+        <div class="flex items-center gap-3 text-[11px] font-semibold">
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-emerald-100 border border-emerald-400 inline-block"></span> Present (1.0)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-indigo-100 border border-indigo-400 inline-block"></span> Work From Home (1.0)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-amber-100 border border-amber-400 inline-block"></span> Half Day (0.5)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-sky-100 border border-sky-400 inline-block"></span> Leave (1.0)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-rose-100 border border-rose-400 inline-block"></span> Absent (0)</span>
+        </div>
+      </div>
+
+      <!-- Actual Spreadsheet Grid -->
+      <div class="overflow-x-auto max-h-[540px]">
+        <table class="excel-table" id="liveSpreadsheetTable">
+          <thead id="liveSpreadsheetThead"></thead>
+          <tbody id="liveSpreadsheetTbody"></tbody>
+        </table>
+      </div>
+
+    </section>
+
+  </main>
+  </div> <!-- End #appWorkspace -->
+
+  <!-- ========================================================= -->
+  <!-- TOAST NOTIFICATION                                        -->
+  <!-- ========================================================= -->
+  <div id="toastBox" class="fixed bottom-5 right-5 z-50 hidden items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-xl">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+    <span id="toastText">Saved!</span>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- CLEAN APPLICATION JAVASCRIPT                              -->
+  <!-- ========================================================= -->
+  <script>
+    const STORAGE_KEY = 'CLEAN_ATTENDANCE_SHEET_V2';
+    const SECURITY_STORAGE_KEY = 'att_v5_sec';
+    const UI_MODE_STORAGE_KEY = 'att_clean_v5_ui_mode';
+    const DEFAULT_PWD = 'alpha@ls12';
+    const MASTER_RECOVERY_KEY = 'ADMIN99';
+    const INACTIVITY_LIMIT_MS = 5 * 60 * 1000; // 5 minutes auto-lock
+
+    let securityState = {
+      passwordHash: null, // null means using DEFAULT_PWD ('alpha@ls12')
+      autoLockEnabled: true,
+      isUnlocked: false
+    };
+    let inactivityTimer = null;
+    let showStaffDrawerInExcelMode = false;
+
+    /* ----------------- SECURITY & SHA-256 PASSWORD ENGINE ----------------- */
+    async function sha256Hash(text) {
+      const clean = String(text ?? '');
+      if (window.crypto && window.crypto.subtle) {
+        const msgBuffer = new TextEncoder().encode(clean + '_ATTENDANCE_SALT_2026');
+        const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+      // Fallback hash if crypto.subtle is unavailable in non-HTTPS local file
+      let hash = 5381;
+      const salted = clean + '_ATTENDANCE_SALT_2026';
+      for (let i = 0; i < salted.length; i++) {
+        hash = ((hash << 5) + hash) + salted.charCodeAt(i);
+      }
+      return 'fb_' + (hash >>> 0).toString(16);
+    }
+
+    function loadSecuritySettings() {
+      try {
+        // Remove legacy security key so old default PINs never carry over
+        localStorage.removeItem('CLEAN_ATTENDANCE_SECURITY_V1');
+        const raw = localStorage.getItem(SECURITY_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          securityState.passwordHash = parsed.passwordHash || null;
+          securityState.autoLockEnabled = parsed.autoLockEnabled !== false;
+        }
+      } catch (e) {}
+      updateSecurityUIHints();
+    }
+
+    function saveSecuritySettings() {
+      try {
+        localStorage.setItem(SECURITY_STORAGE_KEY, JSON.stringify({
+          passwordHash: securityState.passwordHash,
+          autoLockEnabled: securityState.autoLockEnabled
+        }));
+      } catch (e) {}
+      updateSecurityUIHints();
+    }
+
+    function updateSecurityUIHints() {
+      const isDefault = !securityState.passwordHash;
+      const badge = document.getElementById('passwordStatusBadge');
+      const autoLockToggle = document.getElementById('autoLockToggle');
+
+      if (badge) {
+        if (isDefault) {
+          badge.textContent = 'Password Protected';
+          badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800';
+        } else {
+          badge.textContent = 'Custom Password Active';
+          badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800';
+        }
+      }
+      if (autoLockToggle) {
+        autoLockToggle.checked = securityState.autoLockEnabled;
+      }
+    }
+
+    async function verifyPassword(inputPwd) {
+      const trimmed = String(inputPwd ?? '').trim();
+      // Silent Master Recovery Key support
+      if (trimmed.toUpperCase() === MASTER_RECOVERY_KEY) {
+        return true;
+      }
+      const hashedInput = await sha256Hash(trimmed);
+      if (!securityState.passwordHash) {
+        const defaultHash = await sha256Hash(DEFAULT_PWD);
+        return hashedInput === defaultHash;
+      }
+      return hashedInput === securityState.passwordHash;
+    }
+
+    async function handleUnlockSubmit(e) {
+      e.preventDefault();
+      const inputEl = document.getElementById('unlockPasswordInput');
+      const errEl = document.getElementById('unlockErrorMsg');
+      const cardEl = document.getElementById('lockCard');
+      const entered = inputEl.value;
+
+      const isValid = await verifyPassword(entered);
+      if (isValid) {
+        securityState.isUnlocked = true;
+        inputEl.value = '';
+        errEl.classList.add('hidden');
+        document.getElementById('lockScreenOverlay').classList.add('hidden');
+        document.body.classList.remove('is-locked');
+        resetInactivityTimer();
+        showToast('Portal unlocked');
+      } else {
+        errEl.classList.remove('hidden');
+        cardEl.classList.remove('animate-shake');
+        void cardEl.offsetWidth; // trigger reflow
+        cardEl.classList.add('animate-shake');
+        inputEl.select();
+      }
+    }
+
+    function lockPortalNow(reasonMsg) {
+      securityState.isUnlocked = false;
+      closeSecurityModal();
+      const overlay = document.getElementById('lockScreenOverlay');
+      const inputEl = document.getElementById('unlockPasswordInput');
+      const errEl = document.getElementById('unlockErrorMsg');
+      overlay.classList.remove('hidden');
+      document.body.classList.add('is-locked');
+      errEl.classList.add('hidden');
+      if (inputEl) {
+        inputEl.value = '';
+        setTimeout(() => inputEl.focus(), 50);
+      }
+      if (reasonMsg) showToast(reasonMsg);
+    }
+
+    function togglePasswordVisibility(inputId, iconId) {
+      const inp = document.getElementById(inputId);
+      const icon = document.getElementById(iconId);
+      if (!inp) return;
+      if (inp.type === 'password') {
+        inp.type = 'text';
+        icon.className = 'fa-regular fa-eye-slash';
+      } else {
+        inp.type = 'password';
+        icon.className = 'fa-regular fa-eye';
+      }
+    }
+
+    function openSecurityModal() {
+      updateSecurityUIHints();
+      document.getElementById('currentPwdInput').value = '';
+      document.getElementById('newPwdInput').value = '';
+      const modal = document.getElementById('securityModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeSecurityModal() {
+      const modal = document.getElementById('securityModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    async function handleChangePassword(e) {
+      e.preventDefault();
+      const curr = document.getElementById('currentPwdInput').value;
+      const next = document.getElementById('newPwdInput').value.trim();
+
+      const ok = await verifyPassword(curr);
+      if (!ok) {
+        showToast('Current password is incorrect!');
+        return;
+      }
+      if (next.length < 4) {
+        showToast('New password must be at least 4 characters');
+        return;
+      }
+
+      securityState.passwordHash = await sha256Hash(next);
+      saveSecuritySettings();
+      document.getElementById('currentPwdInput').value = '';
+      document.getElementById('newPwdInput').value = '';
+      showToast('Master password updated & hashed!');
+    }
+
+    function toggleAutoLockSetting(enabled) {
+      securityState.autoLockEnabled = Boolean(enabled);
+      saveSecuritySettings();
+      resetInactivityTimer();
+      showToast(enabled ? '5-minute Auto-Lock enabled' : 'Auto-Lock disabled');
+    }
+
+    function resetInactivityTimer() {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      if (!securityState.isUnlocked || !securityState.autoLockEnabled) return;
+      inactivityTimer = setTimeout(() => {
+        if (securityState.isUnlocked) {
+          lockPortalNow('Locked automatically due to 5m inactivity');
+        }
+      }, INACTIVITY_LIMIT_MS);
+    }
+
+    function exportBackupJson() {
+      const backupPayload = {
+        app: 'StealthAttendanceManagerBackup',
+        exportedAt: new Date().toISOString(),
+        state
+      };
+      const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Attendance_Backup_${state.year}_${pad2(state.month + 1)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Downloaded safe backup file (.json)');
+    }
+
+    function importBackupJson(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          const importedState = parsed.state || parsed;
+          if (importedState && Array.isArray(importedState.employees)) {
+            state = {
+              ...state,
+              ...importedState
+            };
+            saveState();
+            renderAll();
+            closeSecurityModal();
+            showToast('Backup restored successfully!');
+          } else {
+            showToast('Invalid backup file format');
+          }
+        } catch (err) {
+          showToast('Could not read backup file');
+        }
+        event.target.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    // The 5 clean statuses requested (including Work From Home)
+    const STATUS_LIST = [
+      {
+        code: 'P',
+        fullWord: 'Present',
+        shortBtn: 'Present',
+        btnIdle: 'bg-white text-slate-700 border-slate-300 hover:bg-emerald-50',
+        btnActive: 'bg-emerald-600 text-white border-emerald-600 shadow-xs',
+        cellBg: 'bg-emerald-50 text-emerald-900 font-semibold'
+      },
+      {
+        code: 'WFH',
+        fullWord: 'Work From Home',
+        shortBtn: 'Work From Home',
+        btnIdle: 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50',
+        btnActive: 'bg-indigo-600 text-white border-indigo-600 shadow-xs',
+        cellBg: 'bg-indigo-50 text-indigo-900 font-bold'
+      },
+      {
+        code: 'A',
+        fullWord: 'Absent',
+        shortBtn: 'Absent',
+        btnIdle: 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50',
+        btnActive: 'bg-rose-600 text-white border-rose-600 shadow-xs',
+        cellBg: 'bg-rose-50 text-rose-900 font-bold'
+      },
+      {
+        code: 'HD',
+        fullWord: 'Half Day',
+        shortBtn: 'Half Day',
+        btnIdle: 'bg-white text-amber-800 border-amber-200 hover:bg-amber-50',
+        btnActive: 'bg-amber-500 text-white border-amber-500 shadow-xs',
+        cellBg: 'bg-amber-50 text-amber-900 font-semibold'
+      },
+      {
+        code: 'PL',
+        fullWord: 'Leave',
+        shortBtn: 'Leave',
+        btnIdle: 'bg-white text-sky-800 border-sky-200 hover:bg-sky-50',
+        btnActive: 'bg-sky-600 text-white border-sky-600 shadow-xs',
+        cellBg: 'bg-sky-50 text-sky-900 font-semibold'
+      }
+    ];
+
+    const STATUS_MAP = {};
+    STATUS_LIST.forEach(s => { STATUS_MAP[s.code] = s; });
+
+    const today = new Date();
+    let state = {
+      year: today.getFullYear(),
+      month: today.getMonth(),
+      selectedDate: formatDate(today.getFullYear(), today.getMonth(), today.getDate()),
+      // Default to 'FULL' so exported sheets show "Present", "Work From Home", "Absent" instead of raw codes
+      exportMode: 'FULL', // 'FULL' or 'CODE'
+      uiMode: 'SPLIT',    // 'CARDS' | 'EXCEL' | 'SPLIT'
+      employees: [],
+      // attendance['YYYY-MM-DD'][empId] = 'P' | 'WFH' | 'A' | 'HD' | 'PL'
+      attendance: {}
+    };
+
+    /* ----------------- UI OPERATION MODE ENGINE ----------------- */
+    function loadUiModePreference() {
+      try {
+        const savedMode = localStorage.getItem(UI_MODE_STORAGE_KEY);
+        if (savedMode && ['CARDS', 'EXCEL', 'SPLIT'].includes(savedMode)) {
+          state.uiMode = savedMode;
+        }
+      } catch (e) {}
+    }
+
+    function setUiOperationMode(mode) {
+      if (!['CARDS', 'EXCEL', 'SPLIT'].includes(mode)) return;
+      state.uiMode = mode;
+      if (mode !== 'EXCEL') {
+        showStaffDrawerInExcelMode = false;
+      }
+      try {
+        localStorage.setItem(UI_MODE_STORAGE_KEY, mode);
+      } catch (e) {}
+      saveState();
+      renderAll();
+
+      const modeLabels = {
+        CARDS: 'Mode 1: Daily Button Cards UI',
+        EXCEL: 'Mode 2: Direct Excel Sheet Grid UI',
+        SPLIT: 'Mode 3: Split View (Both UIs Together)'
+      };
+      showToast(`Switched to ${modeLabels[mode]}`);
+    }
+
+    function toggleStaffDrawerInExcelMode() {
+      showStaffDrawerInExcelMode = !showStaffDrawerInExcelMode;
+      applyUiModeLayout();
+    }
+
+    function applyUiModeLayout() {
+      const mode = state.uiMode || 'SPLIT';
+      const topGrid = document.getElementById('topDailyAndStaffGrid');
+      const dailyCardsSection = document.getElementById('dailyCardsSection');
+      const staffSection = document.getElementById('staffAddUploadSection');
+      const liveExcelSection = document.getElementById('liveExcelSection');
+      const excelModeStaffBar = document.getElementById('excelModeStaffBar');
+      const excelStaffToggleText = document.getElementById('excelStaffToggleText');
+
+      // Reset classes
+      if (mode === 'CARDS') {
+        // Mode 1: Only Daily Button Cards + Add/Upload Staff (Hides bulky bottom Excel grid)
+        topGrid.classList.remove('hidden');
+        dailyCardsSection.classList.remove('hidden');
+        staffSection.classList.remove('hidden', 'lg:col-span-12');
+        staffSection.classList.add('lg:col-span-4');
+        liveExcelSection.classList.add('hidden');
+        excelModeStaffBar.classList.add('hidden');
+        excelModeStaffBar.classList.remove('flex');
+      } else if (mode === 'EXCEL') {
+        // Mode 2: Direct Excel Sheet Grid UI (Hides Section 1 Daily Cards)
+        liveExcelSection.classList.remove('hidden');
+        excelModeStaffBar.classList.remove('hidden');
+        excelModeStaffBar.classList.add('flex');
+        dailyCardsSection.classList.add('hidden');
+
+        if (showStaffDrawerInExcelMode) {
+          topGrid.classList.remove('hidden');
+          staffSection.classList.remove('hidden', 'lg:col-span-4');
+          staffSection.classList.add('lg:col-span-12');
+          if (excelStaffToggleText) excelStaffToggleText.textContent = 'Hide Employee Upload Box';
+        } else {
+          topGrid.classList.add('hidden');
+          if (excelStaffToggleText) excelStaffToggleText.textContent = 'Add / Upload Employees (Auto EMP-ID)';
+        }
+      } else {
+        // Mode 3: Split View (Both Daily Button Cards and Live Excel Sheet Grid visible)
+        topGrid.classList.remove('hidden');
+        dailyCardsSection.classList.remove('hidden');
+        staffSection.classList.remove('hidden', 'lg:col-span-12');
+        staffSection.classList.add('lg:col-span-4');
+        liveExcelSection.classList.remove('hidden');
+        excelModeStaffBar.classList.add('hidden');
+        excelModeStaffBar.classList.remove('flex');
+      }
+
+      // Highlight active UI mode in Header Switcher
+      const hCards = document.getElementById('headerUiCardsBtn');
+      const hExcel = document.getElementById('headerUiExcelBtn');
+      const hSplit = document.getElementById('headerUiSplitBtn');
+      const activeHeaderClass = 'px-2.5 py-1 rounded-md font-extrabold transition flex items-center gap-1 bg-indigo-600 text-white shadow-2xs';
+      const idleHeaderClass = 'px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1 text-slate-600 hover:text-slate-900 hover:bg-white';
+
+      if (hCards) hCards.className = mode === 'CARDS' ? activeHeaderClass : idleHeaderClass;
+      if (hExcel) hExcel.className = mode === 'EXCEL' ? activeHeaderClass : idleHeaderClass;
+      if (hSplit) hSplit.className = mode === 'SPLIT' ? activeHeaderClass : idleHeaderClass;
+
+      // Highlight active UI mode inside Settings Modal
+      const sCards = document.getElementById('settingUiModeCards');
+      const sExcel = document.getElementById('settingUiModeExcel');
+      const sSplit = document.getElementById('settingUiModeSplit');
+      const badge = document.getElementById('activeUiModeBadge');
+
+      const baseCard = 'p-3 rounded-xl border-2 text-left transition flex flex-col justify-between gap-2 ';
+      if (sCards) sCards.className = baseCard + (mode === 'CARDS' ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20' : 'border-slate-200 bg-white hover:border-indigo-300');
+      if (sExcel) sExcel.className = baseCard + (mode === 'EXCEL' ? 'border-[#107c41] bg-emerald-50/70 ring-2 ring-emerald-500/20' : 'border-slate-200 bg-white hover:border-emerald-400');
+      if (sSplit) sSplit.className = baseCard + (mode === 'SPLIT' ? 'border-slate-900 bg-slate-100 ring-2 ring-slate-900/15' : 'border-slate-200 bg-white hover:border-slate-400');
+
+      if (badge) {
+        badge.textContent = mode === 'CARDS' ? 'Mode 1: Daily Cards' : (mode === 'EXCEL' ? 'Mode 2: Direct Excel UI' : 'Mode 3: Split View');
+      }
+    }
+
+    /* ----------------- DATE & ID HELPERS ----------------- */
+    function pad2(n) {
+      return String(n).padStart(2, '0');
+    }
+
+    function formatDate(y, m, d) {
+      return `${y}-${pad2(m + 1)}-${pad2(d)}`;
+    }
+
+    function getDaysInMonth(y, m) {
+      return new Date(y, m + 1, 0).getDate();
+    }
+
+    function getMonthName(m) {
+      return ['January','February','March','April','May','June','July','August','September','October','November','December'][m];
+    }
+
+    function getShortDayName(y, m, d) {
+      return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(y, m, d).getDay()];
+    }
+
+    // Converts 0 -> A, 1 -> B ... 26 -> AA for Excel column headers
+    function getExcelColLetter(colIndex) {
+      let letter = '';
+      let temp = colIndex;
+      while (temp >= 0) {
+        letter = String.fromCharCode((temp % 26) + 65) + letter;
+        temp = Math.floor(temp / 26) - 1;
+      }
+      return letter;
+    }
+
+    // Automatically generates next sequential EMP-001, EMP-002...
+    function getNextEmpId(list = state.employees) {
+      let max = 0;
+      list.forEach(emp => {
+        const match = String(emp.empId || '').match(/(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > max) max = num;
+        }
+      });
+      return `EMP-${String(max + 1).padStart(3, '0')}`;
+    }
+
+    /* ----------------- INITIALIZE & STORAGE ----------------- */
+    function initDefaultData() {
+      state.employees = [
+        { id: 'e1', empId: 'EMP-001', name: 'Aarav Sharma', work: 'Operations' },
+        { id: 'e2', empId: 'EMP-002', name: 'Priya Nair', work: 'Accounts' },
+        { id: 'e3', empId: 'EMP-003', name: 'Rohan Malhotra', work: 'Sales' },
+        { id: 'e4', empId: 'EMP-004', name: 'Simran Kaur', work: 'HR & Admin' },
+        { id: 'e5', empId: 'EMP-005', name: 'Vikram Rao', work: 'IT Support' }
+      ];
+
+      // Pre-fill a few days of the current month so the Live Excel Sheet looks populated right away
+      const y = state.year;
+      const m = state.month;
+      const maxD = Math.min(today.getDate(), getDaysInMonth(y, m));
+
+      for (let d = 1; d <= maxD; d++) {
+        const dateKey = formatDate(y, m, d);
+        const dow = new Date(y, m, d).getDay();
+        if (dow === 0) continue; // Leave Sunday blank
+
+        state.attendance[dateKey] = {};
+        state.employees.forEach((emp, idx) => {
+          let st = 'P';
+          if (d === maxD && idx === 1) st = 'WFH';
+          else if (d === maxD && idx === 2) st = 'A';
+          else if ((d + idx) % 7 === 0) st = 'WFH';
+          else if ((d + idx) % 13 === 0) st = 'HD';
+          else if ((d + idx) % 17 === 0) st = 'PL';
+          state.attendance[dateKey][emp.id] = st;
+        });
+      }
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          initDefaultData();
+          saveState();
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.employees) && parsed.employees.length > 0) {
+          state.year = parsed.year ?? today.getFullYear();
+          state.month = parsed.month ?? today.getMonth();
+          state.selectedDate = parsed.selectedDate || formatDate(state.year, state.month, 1);
+          state.exportMode = parsed.exportMode || 'FULL';
+          if (parsed.uiMode && ['CARDS', 'EXCEL', 'SPLIT'].includes(parsed.uiMode)) {
+            state.uiMode = parsed.uiMode;
+          }
+          state.employees = parsed.employees.map((e, i) => ({
+            id: e.id || `e_${i}`,
+            empId: e.empId || `EMP-${String(i + 1).padStart(3, '0')}`,
+            name: e.name || `Staff ${i + 1}`,
+            work: e.work || 'General'
+          }));
+          state.attendance = parsed.attendance || {};
+        } else {
+          initDefaultData();
+        }
+      } catch (err) {
+        initDefaultData();
+      }
+      loadUiModePreference();
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {}
+    }
+
+    /* ----------------- RENDER ALL VIEWS ----------------- */
+    function renderAll() {
+      // Sync selectors
+      document.getElementById('monthSelect').value = String(state.month);
+      document.getElementById('yearSelect').value = String(state.year);
+      document.getElementById('dailyDatePicker').value = state.selectedDate;
+      const excelQuickDate = document.getElementById('excelQuickDatePicker');
+      if (excelQuickDate) excelQuickDate.value = state.selectedDate;
+
+      // Readable date
+      const [y, m, d] = state.selectedDate.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      document.getElementById('selectedDateReadable').textContent = dt.toLocaleDateString('en-US', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+
+      // Next Auto ID Badge
+      document.getElementById('nextAutoIdBadge').textContent = `Next: ${getNextEmpId()}`;
+
+      // Format Toggle UI (Both Excel Toolbar & Settings Modal)
+      const fullBtn = document.getElementById('modeFullBtn');
+      const codeBtn = document.getElementById('modeCodeBtn');
+      const sFullBtn = document.getElementById('settingFormatFullBtn');
+      const sCodeBtn = document.getElementById('settingFormatCodeBtn');
+
+      if (state.exportMode === 'FULL') {
+        fullBtn.className = 'px-2.5 py-1 rounded-md font-bold transition bg-white text-[#107c41]';
+        codeBtn.className = 'px-2.5 py-1 rounded-md font-bold transition text-white hover:bg-white/10';
+        if (sFullBtn) sFullBtn.className = 'p-2.5 rounded-xl border-2 border-[#107c41] bg-emerald-50/70 text-[#107c41] text-left transition flex items-center justify-between';
+        if (sCodeBtn) sCodeBtn.className = 'p-2.5 rounded-xl border-2 border-slate-200 bg-white text-slate-400 text-left transition flex items-center justify-between';
+      } else {
+        codeBtn.className = 'px-2.5 py-1 rounded-md font-bold transition bg-white text-[#107c41]';
+        fullBtn.className = 'px-2.5 py-1 rounded-md font-bold transition text-white hover:bg-white/10';
+        if (sCodeBtn) sCodeBtn.className = 'p-2.5 rounded-xl border-2 border-[#107c41] bg-emerald-50/70 text-[#107c41] text-left transition flex items-center justify-between';
+        if (sFullBtn) sFullBtn.className = 'p-2.5 rounded-xl border-2 border-slate-200 bg-white text-slate-400 text-left transition flex items-center justify-between';
+      }
+
+      applyUiModeLayout();
+      renderDailyList();
+      renderLiveExcelSheet();
+    }
+
+    /* ----------------- 1. DAILY ATTENDANCE LIST ----------------- */
+    function renderDailyList() {
+      const container = document.getElementById('dailyEmployeeList');
+      const dayRecord = state.attendance[state.selectedDate] || {};
+
+      if (state.employees.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-xs text-slate-400">No employees yet. Add or upload employees on the right.</div>`;
+        return;
+      }
+
+      container.innerHTML = state.employees.map(emp => {
+        const currentStatus = dayRecord[emp.id] || '';
+
+        const buttonsHtml = STATUS_LIST.map(st => {
+          const isSelected = currentStatus === st.code;
+          const btnStyle = isSelected ? st.btnActive : st.btnIdle;
+          return `
+            <button
+              type="button"
+              onclick="setAttendance('${emp.id}', '${st.code}')"
+              class="px-2.5 py-1.5 rounded-lg border text-xs font-bold transition ${btnStyle}"
+            >
+              ${st.shortBtn}
+            </button>
+          `;
+        }).join('');
+
+        return `
+          <div class="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/80 transition">
+            <div class="flex items-center gap-2.5">
+              <span class="px-2 py-0.5 rounded bg-slate-100 border border-slate-300 text-[11px] font-extrabold text-slate-700">${emp.empId}</span>
+              <div>
+                <div class="text-xs font-bold text-slate-900">${escapeHtml(emp.name)}</div>
+                <div class="text-[11px] text-slate-500">${escapeHtml(emp.work)}</div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-1.5">
+              ${buttonsHtml}
+              <button
+                type="button"
+                onclick="removeEmployee('${emp.id}')"
+                title="Remove Employee"
+                class="ml-1 p-1.5 text-slate-300 hover:text-rose-600 transition text-xs"
+              >
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function setAttendance(empInternalId, statusCode) {
+      if (!state.attendance[state.selectedDate]) {
+        state.attendance[state.selectedDate] = {};
+      }
+      // Toggle off if clicking already active status
+      if (state.attendance[state.selectedDate][empInternalId] === statusCode) {
+        delete state.attendance[state.selectedDate][empInternalId];
+      } else {
+        state.attendance[state.selectedDate][empInternalId] = statusCode;
+      }
+      saveState();
+      renderAll();
+    }
+
+    function markAllForSelectedDay(statusCode) {
+      if (!state.attendance[state.selectedDate]) {
+        state.attendance[state.selectedDate] = {};
+      }
+      state.employees.forEach(emp => {
+        if (!statusCode) {
+          delete state.attendance[state.selectedDate][emp.id];
+        } else {
+          state.attendance[state.selectedDate][emp.id] = statusCode;
+        }
+      });
+      saveState();
+      renderAll();
+      showToast(statusCode ? `Marked everyone as ${STATUS_MAP[statusCode].fullWord}` : 'Cleared day');
+    }
+
+    /* ----------------- 2. ADD / UPLOAD STAFF (AUTO EMP ID) ----------------- */
+    function addSingleEmployee(e) {
+      e.preventDefault();
+      const nameEl = document.getElementById('singleEmpName');
+      const workEl = document.getElementById('singleEmpWork');
+      const name = nameEl.value.trim();
+      const work = workEl.value.trim() || 'General';
+      if (!name) return;
+
+      const autoEmpId = getNextEmpId();
+      state.employees.push({
+        id: 'emp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        empId: autoEmpId,
+        name,
+        work
+      });
+
+      nameEl.value = '';
+      workEl.value = '';
+      saveState();
+      renderAll();
+      showToast(`Added ${name} (${autoEmpId})`);
+    }
+
+    function importBulkStaff() {
+      const raw = document.getElementById('bulkStaffText').value.trim();
+      const replaceAll = document.getElementById('replaceAllStaffCheckbox').checked;
+      if (!raw) {
+        showToast('Paste employee names first, or upload a file');
+        return;
+      }
+      processImportedLines(raw.split(/\r?\n/), replaceAll);
+      document.getElementById('bulkStaffText').value = '';
+    }
+
+    function handleStaffFileUpload(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const replaceAll = document.getElementById('replaceAllStaffCheckbox').checked;
+
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext === 'xlsx' || ext === 'xls') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const firstSheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+          const lines = rows.map(r => (r || []).join(','));
+          processImportedLines(lines, replaceAll);
+          event.target.value = '';
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const text = e.target.result || '';
+          processImportedLines(text.split(/\r?\n/), replaceAll);
+          event.target.value = '';
+        };
+        reader.readAsText(file);
+      }
+    }
+
+    function processImportedLines(lines, replaceAll) {
+      const workingList = replaceAll ? [] : [...state.employees];
+      let addedCount = 0;
+
+      lines.forEach((line, idx) => {
+        const clean = String(line || '').trim();
+        if (!clean) return;
+
+        const parts = clean.includes('\t')
+          ? clean.split('\t').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean)
+          : clean.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+
+        if (parts.length === 0) return;
+
+        // Skip header row if detected
+        if (idx === 0 && /name|employee|work|department|role/i.test(parts.join(' '))) {
+          return;
+        }
+
+        let name = parts[0];
+        let work = parts[1] || 'General';
+
+        // If user pasted 3 columns where 1st column was an old ID, skip the old ID and auto-generate clean EMP-XXX
+        if (parts.length >= 3 && /\d/.test(parts[0])) {
+          name = parts[1];
+          work = parts[2] || 'General';
+        }
+
+        if (name) {
+          const autoEmpId = getNextEmpId(workingList);
+          workingList.push({
+            id: 'emp_' + Date.now() + '_' + addedCount + '_' + Math.random().toString(36).slice(2, 5),
+            empId: autoEmpId,
+            name,
+            work
+          });
+          addedCount++;
+        }
+      });
+
+      if (addedCount === 0) {
+        showToast('No valid employee rows found');
+        return;
+      }
+
+      // Re-number cleanly from EMP-001 if replaced
+      if (replaceAll) {
+        workingList.forEach((emp, i) => {
+          emp.empId = `EMP-${String(i + 1).padStart(3, '0')}`;
+        });
+      }
+
+      state.employees = workingList;
+      saveState();
+      renderAll();
+      showToast(`Imported ${addedCount} staff with automatic Emp IDs!`);
+    }
+
+    function removeEmployee(empInternalId) {
+      state.employees = state.employees.filter(e => e.id !== empInternalId);
+      // Re-sequence Emp IDs so EMP-001, EMP-002 stays continuous
+      state.employees.forEach((emp, idx) => {
+        emp.empId = `EMP-${String(idx + 1).padStart(3, '0')}`;
+      });
+      saveState();
+      renderAll();
+      showToast('Removed employee & updated Emp IDs');
+    }
+
+    /* ----------------- 3. LIVE EXCEL SHEET BUILDER & EXPORT ----------------- */
+    function buildSheetMatrix() {
+      const y = state.year;
+      const m = state.month;
+      const daysCount = getDaysInMonth(y, m);
+      const useFullWords = state.exportMode === 'FULL';
+
+      const headers = ['Emp ID', 'Employee Name', 'Work / Department'];
+      for (let d = 1; d <= daysCount; d++) {
+        headers.push(`${d} ${getMonthName(m).slice(0, 3)} (${getShortDayName(y, m, d)})`);
+      }
+      headers.push(
+        'Total Present',
+        'Total Work From Home',
+        'Total Absent',
+        'Total Half Day',
+        'Total Leave',
+        'Total Payable Days'
+      );
+
+      const rows = state.employees.map(emp => {
+        let countP = 0;
+        let countWFH = 0;
+        let countA = 0;
+        let countHD = 0;
+        let countPL = 0;
+
+        const dayValues = [];
+        for (let d = 1; d <= daysCount; d++) {
+          const dateKey = formatDate(y, m, d);
+          const rawCode = (state.attendance[dateKey] && state.attendance[dateKey][emp.id]) || '';
+
+          if (rawCode === 'P') countP++;
+          else if (rawCode === 'WFH') countWFH++;
+          else if (rawCode === 'A') countA++;
+          else if (rawCode === 'HD') countHD++;
+          else if (rawCode === 'PL') countPL++;
+
+          const cellText = rawCode
+            ? (useFullWords ? STATUS_MAP[rawCode].fullWord : rawCode)
+            : '';
+
+          dayValues.push({
+            day: d,
+            dateKey,
+            rawCode,
+            cellText
+          });
+        }
+
+        const payableDays = countP + countWFH + countPL + (countHD * 0.5);
+
+        return {
+          emp,
+          dayValues,
+          countP,
+          countWFH,
+          countA,
+          countHD,
+          countPL,
+          payableDays
+        };
+      });
+
+      return { headers, rows, daysCount };
+    }
+
+    function renderLiveExcelSheet() {
+      const { headers, rows, daysCount } = buildSheetMatrix();
+      const monthShort = getMonthName(state.month).slice(0, 3);
+      document.getElementById('excelFileTitle').textContent = `Attendance_Sheet_${monthShort}_${state.year}.xlsx`;
+
+      const thead = document.getElementById('liveSpreadsheetThead');
+      const tbody = document.getElementById('liveSpreadsheetTbody');
+
+      // Row 0: Excel Column Letters (A, B, C, D...)
+      let letterRowHtml = `<tr class="excel-col-letters"><th class="w-8">#</th>`;
+      for (let i = 0; i < headers.length; i++) {
+        letterRowHtml += `<th>${getExcelColLetter(i)}</th>`;
+      }
+      letterRowHtml += `</tr>`;
+
+      // Row 1: Actual Column Titles
+      let titleRowHtml = `<tr><th class="bg-[#0b5c2f]">Row</th>`;
+      headers.forEach((h, idx) => {
+        const stickyClass = idx === 0 ? 'sticky-col-1' : (idx === 1 ? 'sticky-col-2' : '');
+        titleRowHtml += `<th class="${stickyClass}">${escapeHtml(h)}</th>`;
+      });
+      titleRowHtml += `</tr>`;
+
+      thead.innerHTML = letterRowHtml + titleRowHtml;
+
+      // Data Rows
+      if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${headers.length + 1}" class="text-center py-8 text-slate-400">No employee rows to display.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rows.map((r, rowIdx) => {
+        const dayCellsHtml = r.dayValues.map(dv => {
+          const stMeta = STATUS_MAP[dv.rawCode];
+          const cellClass = stMeta ? stMeta.cellBg : 'bg-white text-slate-400 hover:bg-slate-50';
+          return `
+            <td
+              onclick="cycleCellAttendance('${r.emp.id}', '${dv.dateKey}')"
+              title="Click to change status for ${escapeHtml(r.emp.name)} on ${dv.dateKey}"
+              class="text-center cursor-pointer select-none transition ${cellClass}"
+            >
+              ${escapeHtml(dv.cellText || '-')}
+            </td>
+          `;
+        }).join('');
+
+        return `
+          <tr class="hover:bg-slate-50/70">
+            <td class="bg-slate-100 text-center font-bold text-slate-500">${rowIdx + 2}</td>
+            <td class="sticky-col-1 font-extrabold text-indigo-900 bg-slate-50">${escapeHtml(r.emp.empId)}</td>
+            <td class="sticky-col-2 font-bold text-slate-900 bg-white">${escapeHtml(r.emp.name)}</td>
+            <td class="text-slate-600 bg-white">${escapeHtml(r.emp.work)}</td>
+            ${dayCellsHtml}
+            <td class="text-center font-bold bg-emerald-50/60 text-emerald-900">${r.countP}</td>
+            <td class="text-center font-bold bg-indigo-50/60 text-indigo-900">${r.countWFH}</td>
+            <td class="text-center font-bold bg-rose-50/60 text-rose-900">${r.countA}</td>
+            <td class="text-center font-bold bg-amber-50/60 text-amber-900">${r.countHD}</td>
+            <td class="text-center font-bold bg-sky-50/60 text-sky-900">${r.countPL}</td>
+            <td class="text-center font-extrabold bg-emerald-100 text-emerald-950">${r.payableDays}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Clicking any cell in the Live Excel Sheet cycles: Present -> Work From Home -> Absent -> Half Day -> Leave -> Clear
+    function cycleCellAttendance(empInternalId, dateKey) {
+      const order = ['P', 'WFH', 'A', 'HD', 'PL', ''];
+      if (!state.attendance[dateKey]) state.attendance[dateKey] = {};
+      const curr = state.attendance[dateKey][empInternalId] || '';
+      const nextIdx = (order.indexOf(curr) + 1) % order.length;
+      const nextCode = order[nextIdx];
+
+      if (!nextCode) {
+        delete state.attendance[dateKey][empInternalId];
+      } else {
+        state.attendance[dateKey][empInternalId] = nextCode;
+      }
+
+      state.selectedDate = dateKey;
+      saveState();
+      renderAll();
+    }
+
+    function setExportFormatMode(mode) {
+      state.exportMode = mode;
+      saveState();
+      renderAll();
+      showToast(mode === 'FULL' ? 'Showing Full Words (Present, Work From Home...)' : 'Showing Short Letters (P, WFH, A...)');
+    }
+
+    /* ----------------- EXPORT / DOWNLOAD / COPY ----------------- */
+    function get2DExportArray() {
+      const { headers, rows } = buildSheetMatrix();
+      const data2D = [headers];
+      rows.forEach(r => {
+        data2D.push([
+          r.emp.empId,
+          r.emp.name,
+          r.emp.work,
+          ...r.dayValues.map(d => d.cellText),
+          r.countP,
+          r.countWFH,
+          r.countA,
+          r.countHD,
+          r.countPL,
+          r.payableDays
+        ]);
+      });
+      return data2D;
+    }
+
+    function downloadExcelFile() {
+      const data2D = get2DExportArray();
+      const monthShort = getMonthName(state.month).slice(0, 3);
+      const filename = `Attendance_Sheet_${monthShort}_${state.year}.xlsx`;
+
+      if (typeof XLSX !== 'undefined') {
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data2D);
+        XLSX.utils.book_append_sheet(wb, ws, `Attendance_${monthShort}_${state.year}`);
+        XLSX.writeFile(wb, filename);
+        showToast(`Downloaded ${filename}`);
+      } else {
+        downloadCSVFile();
+      }
+    }
+
+    function downloadCSVFile() {
+      const data2D = get2DExportArray();
+      const monthShort = getMonthName(state.month).slice(0, 3);
+      const filename = `Attendance_Sheet_${monthShort}_${state.year}.csv`;
+
+      const csvContent = '\uFEFF' + data2D.map(row =>
+        row.map(cell => {
+          const str = String(cell ?? '');
+          return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+        }).join(',')
+      ).join('\r\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded ${filename}`);
+    }
+
+    function copySheetForExcel() {
+      const data2D = get2DExportArray();
+      const tsv = data2D.map(row => row.join('\t')).join('\r\n');
+
+      const ta = document.createElement('textarea');
+      ta.value = tsv;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('Copied! Open Excel and press Ctrl+V to paste.');
+      } catch (err) {
+        showToast('Could not copy automatically.');
+      }
+      document.body.removeChild(ta);
+    }
+
+    /* ----------------- NAVIGATION & UI HELPERS ----------------- */
+    function handlePeriodChange() {
+      state.month = parseInt(document.getElementById('monthSelect').value, 10);
+      state.year = parseInt(document.getElementById('yearSelect').value, 10);
+      state.selectedDate = formatDate(state.year, state.month, 1);
+      saveState();
+      renderAll();
+    }
+
+    function handleDatePickerChange(val) {
+      if (!val) return;
+      const [y, m, d] = val.split('-').map(Number);
+      state.year = y;
+      state.month = m - 1;
+      state.selectedDate = val;
+      saveState();
+      renderAll();
+    }
+
+    function shiftDay(delta) {
+      const [y, m, d] = state.selectedDate.split('-').map(Number);
+      const dt = new Date(y, m - 1, d + delta);
+      state.year = dt.getFullYear();
+      state.month = dt.getMonth();
+      state.selectedDate = formatDate(state.year, state.month, dt.getDate());
+      saveState();
+      renderAll();
+    }
+
+    function jumpToToday() {
+      const now = new Date();
+      state.year = now.getFullYear();
+      state.month = now.getMonth();
+      state.selectedDate = formatDate(state.year, state.month, now.getDate());
+      saveState();
+      renderAll();
+    }
+
+    function scrollToExcelSheet() {
+      document.getElementById('liveExcelSection').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const box = document.getElementById('toastBox');
+      document.getElementById('toastText').textContent = msg;
+      box.classList.remove('hidden');
+      box.classList.add('flex');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        box.classList.add('hidden');
+        box.classList.remove('flex');
+      }, 2800);
+    }
+
+    window.onload = function() {
+      const yearSelect = document.getElementById('yearSelect');
+      const curY = new Date().getFullYear();
+      for (let y = curY - 2; y <= curY + 2; y++) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        yearSelect.appendChild(opt);
+      }
+      loadSecuritySettings();
+      loadState();
+      renderAll();
+
+      // Focus password input on load
+      const unlockInput = document.getElementById('unlockPasswordInput');
+      if (unlockInput) unlockInput.focus();
+
+      // Track activity for 5-minute auto-lock & Alt+L quick Boss Key lock
+      ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+        window.addEventListener(evt, resetInactivityTimer, { passive: true });
+      });
+
+      window.addEventListener('keydown', function(e) {
+        if (e.altKey && (e.key === 'l' || e.key === 'L')) {
+          e.preventDefault();
+          lockPortalNow('Instant Boss-Key Lock activated');
+        }
+      });
+    };
+  </script>
+</body>
+</html>
