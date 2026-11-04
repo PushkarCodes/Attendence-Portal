@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Attendance & Live Excel Sheet</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS for real .xlsx & .csv file exports/uploads -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Google Font: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+
+    /* Excel-style table gridlines */
+    .excel-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 12px;
+    }
+    .excel-table th,
+    .excel-table td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 8px;
+      white-space: nowrap;
+    }
+    .excel-table thead th {
+      background-color: #107c41; /* Classic Excel Green */
+      color: #ffffff;
+      font-weight: 700;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .excel-col-letters th {
+      background-color: #e2e8f0 !important;
+      color: #475569 !important;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 6px;
+      border: 1px solid #cbd5e1;
+    }
+
+    /* Sticky left columns in Excel view */
+    .sticky-col-1 {
+      position: sticky;
+      left: 0;
+      z-index: 5;
+      background-color: #f8fafc;
+    }
+    .sticky-col-2 {
+      position: sticky;
+      left: 78px;
+      z-index: 5;
+      background-color: #ffffff;
+    }
+    .excel-table thead .sticky-col-1,
+    .excel-table thead .sticky-col-2 {
+      z-index: 20;
+      background-color: #0b5c2f;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- ========================================================= -->
+  <!-- TOP BAR: MONTH SELECTOR & BIG EXCEL SHEET / DOWNLOAD BTNS -->
+  <!-- ========================================================= -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Brand + Month/Year Selector -->
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-lg bg-[#107c41] text-white flex items-center justify-center font-bold shadow-xs">
+            <i class="fa-solid fa-file-excel text-lg"></i>
+          </div>
+          <div>
+            <h1 class="text-base font-extrabold text-slate-900 leading-tight">Attendance Sheet Maker</h1>
+            <p class="text-[11px] text-slate-500 font-medium">Auto-saves in browser &bull; Zero formulas to break</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <select id="monthSelect" onchange="handlePeriodChange()" class="bg-white px-2.5 py-1.5 rounded-md text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none">
+            <option value="0">January</option>
+            <option value="1">February</option>
+            <option value="2">March</option>
+            <option value="3">April</option>
+            <option value="4">May</option>
+            <option value="5">June</option>
+            <option value="6">July</option>
+            <option value="7">August</option>
+            <option value="8">September</option>
+            <option value="9">October</option>
+            <option value="10">November</option>
+            <option value="11">December</option>
+          </select>
+          <select id="yearSelect" onchange="handlePeriodChange()" class="bg-white px-2.5 py-1.5 rounded-md text-xs font-bold text-slate-800 border border-slate-200 focus:outline-none">
+          </select>
+        </div>
+      </div>
+
+      <!-- Primary Action Buttons -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="scrollToExcelSheet()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs">
+          <i class="fa-solid fa-table"></i>
+          <span>See Live Excel File Below</span>
+        </button>
+
+        <button onclick="copySheetForExcel()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs">
+          <i class="fa-regular fa-copy"></i>
+          <span>Copy Sheet (Paste in Excel)</span>
+        </button>
+
+        <button onclick="downloadExcelFile()" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#107c41] hover:bg-[#0c5e31] text-white text-xs font-bold transition shadow-xs">
+          <i class="fa-solid fa-download"></i>
+          <span>Download Excel (.xlsx)</span>
+        </button>
+
+        <button onclick="downloadCSVFile()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition">
+          <i class="fa-solid fa-file-csv"></i>
+          <span>Download .CSV</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ========================================================= -->
+  <!-- MAIN WORKSPACE: SIMPLE 2-STEP FLOW + LIVE EXCEL FILE VIEW -->
+  <!-- ========================================================= -->
+  <main class="max-w-7xl w-full mx-auto px-4 py-5 space-y-6 flex-1">
+
+    <!-- TOP GRID: LEFT = DAILY ATTENDANCE, RIGHT = ADD/UPLOAD STAFF (AUTO EMP ID) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+      <!-- ======================================================= -->
+      <!-- SECTION 1 (LEFT 8 COLS): MARK TODAY'S ATTENDANCE        -->
+      <!-- ======================================================= -->
+      <section class="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+        
+        <!-- Section Header with Date Picker & 1-Click Mark All -->
+        <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">1</span>
+            <div>
+              <h2 class="text-sm font-extrabold text-slate-900">Mark Daily Attendance</h2>
+              <p class="text-[11px] text-slate-500">Pick a date and click a button for each employee (updates the Excel sheet below live)</p>
+            </div>
+          </div>
+
+          <!-- Date Picker -->
+          <div class="flex items-center gap-1.5">
+            <button onclick="shiftDay(-1)" class="p-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs" title="Previous Day">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input
+              type="date"
+              id="dailyDatePicker"
+              onchange="handleDatePickerChange(this.value)"
+              class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button onclick="shiftDay(1)" class="p-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs" title="Next Day">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button onclick="jumpToToday()" class="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold">
+              Today
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Bar: Selected Date Label + 1-Click Mark All Present / WFH -->
+        <div class="px-4 py-2.5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <div class="text-xs font-bold text-slate-700 flex items-center gap-2">
+            <i class="fa-regular fa-calendar-check text-indigo-600"></i>
+            <span id="selectedDateReadable">Loading date...</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button onclick="markAllForSelectedDay('P')" class="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition">
+              Mark All Present
+            </button>
+            <button onclick="markAllForSelectedDay('WFH')" class="px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition">
+              Mark All Work From Home
+            </button>
+            <button onclick="markAllForSelectedDay('')" class="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-semibold transition">
+              Clear Day
+            </button>
+          </div>
+        </div>
+
+        <!-- Employee Attendance Rows -->
+        <div class="divide-y divide-slate-200 max-h-[380px] overflow-y-auto" id="dailyEmployeeList">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- ======================================================= -->
+      <!-- SECTION 2 (RIGHT 4 COLS): ADD / UPLOAD STAFF (AUTO ID)  -->
+      <!-- ======================================================= -->
+      <section class="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
+        <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">2</span>
+            <div>
+              <h2 class="text-sm font-extrabold text-slate-900">Add / Upload Employees</h2>
+              <p class="text-[11px] text-slate-500">Emp ID (<code class="font-bold text-indigo-700">EMP-001</code>...) is 100% automatic</p>
+            </div>
+          </div>
+          <span id="nextAutoIdBadge" class="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[11px] font-extrabold">Next: EMP-006</span>
+        </div>
+
+        <div class="p-4 space-y-4 flex-1 flex flex-col justify-between">
+          
+          <!-- Single Add Form (No Emp ID typing needed) -->
+          <form onsubmit="addSingleEmployee(event)" class="space-y-2.5">
+            <div class="text-xs font-bold text-slate-700">Quick Add One Person</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="text"
+                id="singleEmpName"
+                placeholder="Employee Name *"
+                required
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <input
+                type="text"
+                id="singleEmpWork"
+                placeholder="Work / Department *"
+                required
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <button type="submit" class="w-full py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-plus"></i>
+              <span>Add Employee (Auto-Assigns Emp ID)</span>
+            </button>
+          </form>
+
+          <!-- Divider -->
+          <div class="relative flex py-1 items-center">
+            <div class="flex-grow border-t border-slate-200"></div>
+            <span class="flex-shrink mx-2 text-[10px] font-bold uppercase text-slate-400">OR BULK UPLOAD NAMES &amp; WORK</span>
+            <div class="flex-grow border-t border-slate-200"></div>
+          </div>
+
+          <!-- Bulk Paste or Upload CSV/Excel -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold text-slate-700">Paste or Upload Staff List</label>
+              <label class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold cursor-pointer transition border border-indigo-200">
+                <i class="fa-solid fa-upload"></i>
+                <span>Upload Excel/CSV</span>
+                <input type="file" accept=".csv,.xlsx,.xls,.txt" onchange="handleStaffFileUpload(event)" class="hidden" />
+              </label>
+            </div>
+
+            <textarea
+              id="bulkStaffText"
+              rows="3"
+              placeholder="Paste Name, Work (one per line):&#10;Rahul Verma, Sales&#10;Neha Sharma, HR&#10;Amit Patel, Accounts"
+              class="w-full p-2.5 rounded-lg border border-slate-300 text-xs font-mono bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            ></textarea>
+
+            <div class="flex items-center justify-between gap-2">
+              <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-600 font-medium cursor-pointer">
+                <input type="checkbox" id="replaceAllStaffCheckbox" class="rounded accent-indigo-600" />
+                <span>Replace existing list</span>
+              </label>
+
+              <button onclick="importBulkStaff()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition">
+                Import &amp; Auto-Create IDs
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- SECTION 3: LIVE EXCEL SPREADSHEET FILE VIEW (ON SCREEN!)  -->
+    <!-- ========================================================= -->
+    <section id="liveExcelSection" class="bg-white rounded-xl border-2 border-[#107c41] shadow-md overflow-hidden">
+      
+      <!-- Excel Toolbar -->
+      <div class="bg-[#107c41] text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <i class="fa-solid fa-table-cells text-lg"></i>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm sm:text-base font-extrabold" id="excelFileTitle">Attendance_Sheet_Nov_2026.xlsx</h2>
+              <span class="px-2 py-0.5 rounded bg-white/20 text-[10px] font-bold uppercase tracking-wider">Live File View</span>
+            </div>
+            <p class="text-[11px] text-emerald-100">Click any cell in the sheet below to edit attendance directly, or download/copy the file.</p>
+          </div>
+        </div>
+
+        <!-- Format Switcher: Full Words vs Short Codes + Export Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Toggle Full Words vs Short Codes -->
+          <div class="flex items-center bg-black/20 p-1 rounded-lg text-xs">
+            <button
+              id="modeFullBtn"
+              onclick="setExportFormatMode('FULL')"
+              class="px-2.5 py-1 rounded-md font-bold transition bg-white text-[#107c41]"
+            >
+              Full Words (Present, Work From Home)
+            </button>
+            <button
+              id="modeCodeBtn"
+              onclick="setExportFormatMode('CODE')"
+              class="px-2.5 py-1 rounded-md font-bold transition text-white hover:bg-white/10"
+            >
+              Short Letters (P, WFH, A)
+            </button>
+          </div>
+
+          <button onclick="copySheetForExcel()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-[#107c41] hover:bg-emerald-50 text-xs font-extrabold shadow-xs transition">
+            <i class="fa-regular fa-copy"></i>
+            <span>Copy Table for Excel</span>
+          </button>
+
+          <button onclick="downloadExcelFile()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow-xs transition">
+            <i class="fa-solid fa-file-arrow-down"></i>
+            <span>Download .XLSX</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Excel Formula Bar Lookalike -->
+      <div class="bg-slate-100 border-b border-slate-300 px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-slate-700">A1:AN20</span>
+          <span class="italic text-slate-400 font-serif font-bold">fx</span>
+          <span class="font-medium text-slate-700">Payable Days = Present + Work From Home + Leave + (0.5 &times; Half Day)</span>
+        </div>
+        <div class="flex items-center gap-3 text-[11px] font-semibold">
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-emerald-100 border border-emerald-400 inline-block"></span> Present (1.0)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-indigo-100 border border-indigo-400 inline-block"></span> Work From Home (1.0)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-amber-100 border border-amber-400 inline-block"></span> Half Day (0.5)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-sky-100 border border-sky-400 inline-block"></span> Leave (1.0)</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-rose-100 border border-rose-400 inline-block"></span> Absent (0)</span>
+        </div>
+      </div>
+
+      <!-- Actual Spreadsheet Grid -->
+      <div class="overflow-x-auto max-h-[520px]">
+        <table class="excel-table" id="liveSpreadsheetTable">
+          <thead id="liveSpreadsheetThead"></thead>
+          <tbody id="liveSpreadsheetTbody"></tbody>
+        </table>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- TOAST NOTIFICATION                                        -->
+  <!-- ========================================================= -->
+  <div id="toastBox" class="fixed bottom-5 right-5 z-50 hidden items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-xl">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+    <span id="toastText">Saved!</span>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- CLEAN APPLICATION JAVASCRIPT                              -->
+  <!-- ========================================================= -->
+  <script>
+    const STORAGE_KEY = 'CLEAN_ATTENDANCE_SHEET_V2';
+
+    // The 5 clean statuses requested (including Work From Home)
+    const STATUS_LIST = [
+      {
+        code: 'P',
+        fullWord: 'Present',
+        shortBtn: 'Present',
+        btnIdle: 'bg-white text-slate-700 border-slate-300 hover:bg-emerald-50',
+        btnActive: 'bg-emerald-600 text-white border-emerald-600 shadow-xs',
+        cellBg: 'bg-emerald-50 text-emerald-900 font-semibold'
+      },
+      {
+        code: 'WFH',
+        fullWord: 'Work From Home',
+        shortBtn: 'Work From Home',
+        btnIdle: 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50',
+        btnActive: 'bg-indigo-600 text-white border-indigo-600 shadow-xs',
+        cellBg: 'bg-indigo-50 text-indigo-900 font-bold'
+      },
+      {
+        code: 'A',
+        fullWord: 'Absent',
+        shortBtn: 'Absent',
+        btnIdle: 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50',
+        btnActive: 'bg-rose-600 text-white border-rose-600 shadow-xs',
+        cellBg: 'bg-rose-50 text-rose-900 font-bold'
+      },
+      {
+        code: 'HD',
+        fullWord: 'Half Day',
+        shortBtn: 'Half Day',
+        btnIdle: 'bg-white text-amber-800 border-amber-200 hover:bg-amber-50',
+        btnActive: 'bg-amber-500 text-white border-amber-500 shadow-xs',
+        cellBg: 'bg-amber-50 text-amber-900 font-semibold'
+      },
+      {
+        code: 'PL',
+        fullWord: 'Leave',
+        shortBtn: 'Leave',
+        btnIdle: 'bg-white text-sky-800 border-sky-200 hover:bg-sky-50',
+        btnActive: 'bg-sky-600 text-white border-sky-600 shadow-xs',
+        cellBg: 'bg-sky-50 text-sky-900 font-semibold'
+      }
+    ];
+
+    const STATUS_MAP = {};
+    STATUS_LIST.forEach(s => { STATUS_MAP[s.code] = s; });
+
+    const today = new Date();
+    let state = {
+      year: today.getFullYear(),
+      month: today.getMonth(),
+      selectedDate: formatDate(today.getFullYear(), today.getMonth(), today.getDate()),
+      // Default to 'FULL' so exported sheets show "Present", "Work From Home", "Absent" instead of raw codes
+      exportMode: 'FULL', // 'FULL' or 'CODE'
+      employees: [],
+      // attendance['YYYY-MM-DD'][empId] = 'P' | 'WFH' | 'A' | 'HD' | 'PL'
+      attendance: {}
+    };
+
+    /* ----------------- DATE & ID HELPERS ----------------- */
+    function pad2(n) {
+      return String(n).padStart(2, '0');
+    }
+
+    function formatDate(y, m, d) {
+      return `${y}-${pad2(m + 1)}-${pad2(d)}`;
+    }
+
+    function getDaysInMonth(y, m) {
+      return new Date(y, m + 1, 0).getDate();
+    }
+
+    function getMonthName(m) {
+      return ['January','February','March','April','May','June','July','August','September','October','November','December'][m];
+    }
+
+    function getShortDayName(y, m, d) {
+      return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(y, m, d).getDay()];
+    }
+
+    // Converts 0 -> A, 1 -> B ... 26 -> AA for Excel column headers
+    function getExcelColLetter(colIndex) {
+      let letter = '';
+      let temp = colIndex;
+      while (temp >= 0) {
+        letter = String.fromCharCode((temp % 26) + 65) + letter;
+        temp = Math.floor(temp / 26) - 1;
+      }
+      return letter;
+    }
+
+    // Automatically generates next sequential EMP-001, EMP-002...
+    function getNextEmpId(list = state.employees) {
+      let max = 0;
+      list.forEach(emp => {
+        const match = String(emp.empId || '').match(/(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > max) max = num;
+        }
+      });
+      return `EMP-${String(max + 1).padStart(3, '0')}`;
+    }
+
+    /* ----------------- INITIALIZE & STORAGE ----------------- */
+    function initDefaultData() {
+      state.employees = [
+        { id: 'e1', empId: 'EMP-001', name: 'Aarav Sharma', work: 'Operations' },
+        { id: 'e2', empId: 'EMP-002', name: 'Priya Nair', work: 'Accounts' },
+        { id: 'e3', empId: 'EMP-003', name: 'Rohan Malhotra', work: 'Sales' },
+        { id: 'e4', empId: 'EMP-004', name: 'Simran Kaur', work: 'HR & Admin' },
+        { id: 'e5', empId: 'EMP-005', name: 'Vikram Rao', work: 'IT Support' }
+      ];
+
+      // Pre-fill a few days of the current month so the Live Excel Sheet looks populated right away
+      const y = state.year;
+      const m = state.month;
+      const maxD = Math.min(today.getDate(), getDaysInMonth(y, m));
+
+      for (let d = 1; d <= maxD; d++) {
+        const dateKey = formatDate(y, m, d);
+        const dow = new Date(y, m, d).getDay();
+        if (dow === 0) continue; // Leave Sunday blank
+
+        state.attendance[dateKey] = {};
+        state.employees.forEach((emp, idx) => {
+          let st = 'P';
+          if (d === maxD && idx === 1) st = 'WFH';
+          else if (d === maxD && idx === 2) st = 'A';
+          else if ((d + idx) % 7 === 0) st = 'WFH';
+          else if ((d + idx) % 13 === 0) st = 'HD';
+          else if ((d + idx) % 17 === 0) st = 'PL';
+          state.attendance[dateKey][emp.id] = st;
+        });
+      }
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          initDefaultData();
+          saveState();
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.employees) && parsed.employees.length > 0) {
+          state.year = parsed.year ?? today.getFullYear();
+          state.month = parsed.month ?? today.getMonth();
+          state.selectedDate = parsed.selectedDate || formatDate(state.year, state.month, 1);
+          state.exportMode = parsed.exportMode || 'FULL';
+          state.employees = parsed.employees.map((e, i) => ({
+            id: e.id || `e_${i}`,
+            empId: e.empId || `EMP-${String(i + 1).padStart(3, '0')}`,
+            name: e.name || `Staff ${i + 1}`,
+            work: e.work || 'General'
+          }));
+          state.attendance = parsed.attendance || {};
+        } else {
+          initDefaultData();
+        }
+      } catch (err) {
+        initDefaultData();
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {}
+    }
+
+    /* ----------------- RENDER ALL VIEWS ----------------- */
+    function renderAll() {
+      // Sync selectors
+      document.getElementById('monthSelect').value = String(state.month);
+      document.getElementById('yearSelect').value = String(state.year);
+      document.getElementById('dailyDatePicker').value = state.selectedDate;
+
+      // Readable date
+      const [y, m, d] = state.selectedDate.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      document.getElementById('selectedDateReadable').textContent = dt.toLocaleDateString('en-US', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+
+      // Next Auto ID Badge
+      document.getElementById('nextAutoIdBadge').textContent = `Next: ${getNextEmpId()}`;
+
+      // Format Toggle UI
+      const fullBtn = document.getElementById('modeFullBtn');
+      const codeBtn = document.getElementById('modeCodeBtn');
+      if (state.exportMode === 'FULL') {
+        fullBtn.className = 'px-2.5 py-1 rounded-md font-bold transition bg-white text-[#107c41]';
+        codeBtn.className = 'px-2.5 py-1 rounded-md font-bold transition text-white hover:bg-white/10';
+      } else {
+        codeBtn.className = 'px-2.5 py-1 rounded-md font-bold transition bg-white text-[#107c41]';
+        fullBtn.className = 'px-2.5 py-1 rounded-md font-bold transition text-white hover:bg-white/10';
+      }
+
+      renderDailyList();
+      renderLiveExcelSheet();
+    }
+
+    /* ----------------- 1. DAILY ATTENDANCE LIST ----------------- */
+    function renderDailyList() {
+      const container = document.getElementById('dailyEmployeeList');
+      const dayRecord = state.attendance[state.selectedDate] || {};
+
+      if (state.employees.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-xs text-slate-400">No employees yet. Add or upload employees on the right.</div>`;
+        return;
+      }
+
+      container.innerHTML = state.employees.map(emp => {
+        const currentStatus = dayRecord[emp.id] || '';
+
+        const buttonsHtml = STATUS_LIST.map(st => {
+          const isSelected = currentStatus === st.code;
+          const btnStyle = isSelected ? st.btnActive : st.btnIdle;
+          return `
+            <button
+              type="button"
+              onclick="setAttendance('${emp.id}', '${st.code}')"
+              class="px-2.5 py-1.5 rounded-lg border text-xs font-bold transition ${btnStyle}"
+            >
+              ${st.shortBtn}
+            </button>
+          `;
+        }).join('');
+
+        return `
+          <div class="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/80 transition">
+            <div class="flex items-center gap-2.5">
+              <span class="px-2 py-0.5 rounded bg-slate-100 border border-slate-300 text-[11px] font-extrabold text-slate-700">${emp.empId}</span>
+              <div>
+                <div class="text-xs font-bold text-slate-900">${escapeHtml(emp.name)}</div>
+                <div class="text-[11px] text-slate-500">${escapeHtml(emp.work)}</div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-1.5">
+              ${buttonsHtml}
+              <button
+                type="button"
+                onclick="removeEmployee('${emp.id}')"
+                title="Remove Employee"
+                class="ml-1 p-1.5 text-slate-300 hover:text-rose-600 transition text-xs"
+              >
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function setAttendance(empInternalId, statusCode) {
+      if (!state.attendance[state.selectedDate]) {
+        state.attendance[state.selectedDate] = {};
+      }
+      // Toggle off if clicking already active status
+      if (state.attendance[state.selectedDate][empInternalId] === statusCode) {
+        delete state.attendance[state.selectedDate][empInternalId];
+      } else {
+        state.attendance[state.selectedDate][empInternalId] = statusCode;
+      }
+      saveState();
+      renderAll();
+    }
+
+    function markAllForSelectedDay(statusCode) {
+      if (!state.attendance[state.selectedDate]) {
+        state.attendance[state.selectedDate] = {};
+      }
+      state.employees.forEach(emp => {
+        if (!statusCode) {
+          delete state.attendance[state.selectedDate][emp.id];
+        } else {
+          state.attendance[state.selectedDate][emp.id] = statusCode;
+        }
+      });
+      saveState();
+      renderAll();
+      showToast(statusCode ? `Marked everyone as ${STATUS_MAP[statusCode].fullWord}` : 'Cleared day');
+    }
+
+    /* ----------------- 2. ADD / UPLOAD STAFF (AUTO EMP ID) ----------------- */
+    function addSingleEmployee(e) {
+      e.preventDefault();
+      const nameEl = document.getElementById('singleEmpName');
+      const workEl = document.getElementById('singleEmpWork');
+      const name = nameEl.value.trim();
+      const work = workEl.value.trim() || 'General';
+      if (!name) return;
+
+      const autoEmpId = getNextEmpId();
+      state.employees.push({
+        id: 'emp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        empId: autoEmpId,
+        name,
+        work
+      });
+
+      nameEl.value = '';
+      workEl.value = '';
+      saveState();
+      renderAll();
+      showToast(`Added ${name} (${autoEmpId})`);
+    }
+
+    function importBulkStaff() {
+      const raw = document.getElementById('bulkStaffText').value.trim();
+      const replaceAll = document.getElementById('replaceAllStaffCheckbox').checked;
+      if (!raw) {
+        showToast('Paste employee names first, or upload a file');
+        return;
+      }
+      processImportedLines(raw.split(/\r?\n/), replaceAll);
+      document.getElementById('bulkStaffText').value = '';
+    }
+
+    function handleStaffFileUpload(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const replaceAll = document.getElementById('replaceAllStaffCheckbox').checked;
+
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext === 'xlsx' || ext === 'xls') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const firstSheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+          const lines = rows.map(r => (r || []).join(','));
+          processImportedLines(lines, replaceAll);
+          event.target.value = '';
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const text = e.target.result || '';
+          processImportedLines(text.split(/\r?\n/), replaceAll);
+          event.target.value = '';
+        };
+        reader.readAsText(file);
+      }
+    }
+
+    function processImportedLines(lines, replaceAll) {
+      const workingList = replaceAll ? [] : [...state.employees];
+      let addedCount = 0;
+
+      lines.forEach((line, idx) => {
+        const clean = String(line || '').trim();
+        if (!clean) return;
+
+        const parts = clean.includes('\t')
+          ? clean.split('\t').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean)
+          : clean.split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+
+        if (parts.length === 0) return;
+
+        // Skip header row if detected
+        if (idx === 0 && /name|employee|work|department|role/i.test(parts.join(' '))) {
+          return;
+        }
+
+        let name = parts[0];
+        let work = parts[1] || 'General';
+
+        // If user pasted 3 columns where 1st column was an old ID, skip the old ID and auto-generate clean EMP-XXX
+        if (parts.length >= 3 && /\d/.test(parts[0])) {
+          name = parts[1];
+          work = parts[2] || 'General';
+        }
+
+        if (name) {
+          const autoEmpId = getNextEmpId(workingList);
+          workingList.push({
+            id: 'emp_' + Date.now() + '_' + addedCount + '_' + Math.random().toString(36).slice(2, 5),
+            empId: autoEmpId,
+            name,
+            work
+          });
+          addedCount++;
+        }
+      });
+
+      if (addedCount === 0) {
+        showToast('No valid employee rows found');
+        return;
+      }
+
+      // Re-number cleanly from EMP-001 if replaced
+      if (replaceAll) {
+        workingList.forEach((emp, i) => {
+          emp.empId = `EMP-${String(i + 1).padStart(3, '0')}`;
+        });
+      }
+
+      state.employees = workingList;
+      saveState();
+      renderAll();
+      showToast(`Imported ${addedCount} staff with automatic Emp IDs!`);
+    }
+
+    function removeEmployee(empInternalId) {
+      state.employees = state.employees.filter(e => e.id !== empInternalId);
+      // Re-sequence Emp IDs so EMP-001, EMP-002 stays continuous
+      state.employees.forEach((emp, idx) => {
+        emp.empId = `EMP-${String(idx + 1).padStart(3, '0')}`;
+      });
+      saveState();
+      renderAll();
+      showToast('Removed employee & updated Emp IDs');
+    }
+
+    /* ----------------- 3. LIVE EXCEL SHEET BUILDER & EXPORT ----------------- */
+    function buildSheetMatrix() {
+      const y = state.year;
+      const m = state.month;
+      const daysCount = getDaysInMonth(y, m);
+      const useFullWords = state.exportMode === 'FULL';
+
+      const headers = ['Emp ID', 'Employee Name', 'Work / Department'];
+      for (let d = 1; d <= daysCount; d++) {
+        headers.push(`${d} ${getMonthName(m).slice(0, 3)} (${getShortDayName(y, m, d)})`);
+      }
+      headers.push(
+        'Total Present',
+        'Total Work From Home',
+        'Total Absent',
+        'Total Half Day',
+        'Total Leave',
+        'Total Payable Days'
+      );
+
+      const rows = state.employees.map(emp => {
+        let countP = 0;
+        let countWFH = 0;
+        let countA = 0;
+        let countHD = 0;
+        let countPL = 0;
+
+        const dayValues = [];
+        for (let d = 1; d <= daysCount; d++) {
+          const dateKey = formatDate(y, m, d);
+          const rawCode = (state.attendance[dateKey] && state.attendance[dateKey][emp.id]) || '';
+
+          if (rawCode === 'P') countP++;
+          else if (rawCode === 'WFH') countWFH++;
+          else if (rawCode === 'A') countA++;
+          else if (rawCode === 'HD') countHD++;
+          else if (rawCode === 'PL') countPL++;
+
+          const cellText = rawCode
+            ? (useFullWords ? STATUS_MAP[rawCode].fullWord : rawCode)
+            : '';
+
+          dayValues.push({
+            day: d,
+            dateKey,
+            rawCode,
+            cellText
+          });
+        }
+
+        const payableDays = countP + countWFH + countPL + (countHD * 0.5);
+
+        return {
+          emp,
+          dayValues,
+          countP,
+          countWFH,
+          countA,
+          countHD,
+          countPL,
+          payableDays
+        };
+      });
+
+      return { headers, rows, daysCount };
+    }
+
+    function renderLiveExcelSheet() {
+      const { headers, rows, daysCount } = buildSheetMatrix();
+      const monthShort = getMonthName(state.month).slice(0, 3);
+      document.getElementById('excelFileTitle').textContent = `Attendance_Sheet_${monthShort}_${state.year}.xlsx`;
+
+      const thead = document.getElementById('liveSpreadsheetThead');
+      const tbody = document.getElementById('liveSpreadsheetTbody');
+
+      // Row 0: Excel Column Letters (A, B, C, D...)
+      let letterRowHtml = `<tr class="excel-col-letters"><th class="w-8">#</th>`;
+      for (let i = 0; i < headers.length; i++) {
+        letterRowHtml += `<th>${getExcelColLetter(i)}</th>`;
+      }
+      letterRowHtml += `</tr>`;
+
+      // Row 1: Actual Column Titles
+      let titleRowHtml = `<tr><th class="bg-[#0b5c2f]">Row</th>`;
+      headers.forEach((h, idx) => {
+        const stickyClass = idx === 0 ? 'sticky-col-1' : (idx === 1 ? 'sticky-col-2' : '');
+        titleRowHtml += `<th class="${stickyClass}">${escapeHtml(h)}</th>`;
+      });
+      titleRowHtml += `</tr>`;
+
+      thead.innerHTML = letterRowHtml + titleRowHtml;
+
+      // Data Rows
+      if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${headers.length + 1}" class="text-center py-8 text-slate-400">No employee rows to display.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rows.map((r, rowIdx) => {
+        const dayCellsHtml = r.dayValues.map(dv => {
+          const stMeta = STATUS_MAP[dv.rawCode];
+          const cellClass = stMeta ? stMeta.cellBg : 'bg-white text-slate-400 hover:bg-slate-50';
+          return `
+            <td
+              onclick="cycleCellAttendance('${r.emp.id}', '${dv.dateKey}')"
+              title="Click to change status for ${escapeHtml(r.emp.name)} on ${dv.dateKey}"
+              class="text-center cursor-pointer select-none transition ${cellClass}"
+            >
+              ${escapeHtml(dv.cellText || '-')}
+            </td>
+          `;
+        }).join('');
+
+        return `
+          <tr class="hover:bg-slate-50/70">
+            <td class="bg-slate-100 text-center font-bold text-slate-500">${rowIdx + 2}</td>
+            <td class="sticky-col-1 font-extrabold text-indigo-900 bg-slate-50">${escapeHtml(r.emp.empId)}</td>
+            <td class="sticky-col-2 font-bold text-slate-900 bg-white">${escapeHtml(r.emp.name)}</td>
+            <td class="text-slate-600 bg-white">${escapeHtml(r.emp.work)}</td>
+            ${dayCellsHtml}
+            <td class="text-center font-bold bg-emerald-50/60 text-emerald-900">${r.countP}</td>
+            <td class="text-center font-bold bg-indigo-50/60 text-indigo-900">${r.countWFH}</td>
+            <td class="text-center font-bold bg-rose-50/60 text-rose-900">${r.countA}</td>
+            <td class="text-center font-bold bg-amber-50/60 text-amber-900">${r.countHD}</td>
+            <td class="text-center font-bold bg-sky-50/60 text-sky-900">${r.countPL}</td>
+            <td class="text-center font-extrabold bg-emerald-100 text-emerald-950">${r.payableDays}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Clicking any cell in the Live Excel Sheet cycles: Present -> Work From Home -> Absent -> Half Day -> Leave -> Clear
+    function cycleCellAttendance(empInternalId, dateKey) {
+      const order = ['P', 'WFH', 'A', 'HD', 'PL', ''];
+      if (!state.attendance[dateKey]) state.attendance[dateKey] = {};
+      const curr = state.attendance[dateKey][empInternalId] || '';
+      const nextIdx = (order.indexOf(curr) + 1) % order.length;
+      const nextCode = order[nextIdx];
+
+      if (!nextCode) {
+        delete state.attendance[dateKey][empInternalId];
+      } else {
+        state.attendance[dateKey][empInternalId] = nextCode;
+      }
+
+      state.selectedDate = dateKey;
+      saveState();
+      renderAll();
+    }
+
+    function setExportFormatMode(mode) {
+      state.exportMode = mode;
+      saveState();
+      renderAll();
+      showToast(mode === 'FULL' ? 'Showing Full Words (Present, Work From Home...)' : 'Showing Short Letters (P, WFH, A...)');
+    }
+
+    /* ----------------- EXPORT / DOWNLOAD / COPY ----------------- */
+    function get2DExportArray() {
+      const { headers, rows } = buildSheetMatrix();
+      const data2D = [headers];
+      rows.forEach(r => {
+        data2D.push([
+          r.emp.empId,
+          r.emp.name,
+          r.emp.work,
+          ...r.dayValues.map(d => d.cellText),
+          r.countP,
+          r.countWFH,
+          r.countA,
+          r.countHD,
+          r.countPL,
+          r.payableDays
+        ]);
+      });
+      return data2D;
+    }
+
+    function downloadExcelFile() {
+      const data2D = get2DExportArray();
+      const monthShort = getMonthName(state.month).slice(0, 3);
+      const filename = `Attendance_Sheet_${monthShort}_${state.year}.xlsx`;
+
+      if (typeof XLSX !== 'undefined') {
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data2D);
+        XLSX.utils.book_append_sheet(wb, ws, `Attendance_${monthShort}_${state.year}`);
+        XLSX.writeFile(wb, filename);
+        showToast(`Downloaded ${filename}`);
+      } else {
+        downloadCSVFile();
+      }
+    }
+
+    function downloadCSVFile() {
+      const data2D = get2DExportArray();
+      const monthShort = getMonthName(state.month).slice(0, 3);
+      const filename = `Attendance_Sheet_${monthShort}_${state.year}.csv`;
+
+      const csvContent = '\uFEFF' + data2D.map(row =>
+        row.map(cell => {
+          const str = String(cell ?? '');
+          return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+        }).join(',')
+      ).join('\r\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded ${filename}`);
+    }
+
+    function copySheetForExcel() {
+      const data2D = get2DExportArray();
+      const tsv = data2D.map(row => row.join('\t')).join('\r\n');
+
+      const ta = document.createElement('textarea');
+      ta.value = tsv;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('Copied! Open Excel and press Ctrl+V to paste.');
+      } catch (err) {
+        showToast('Could not copy automatically.');
+      }
+      document.body.removeChild(ta);
+    }
+
+    /* ----------------- NAVIGATION & UI HELPERS ----------------- */
+    function handlePeriodChange() {
+      state.month = parseInt(document.getElementById('monthSelect').value, 10);
+      state.year = parseInt(document.getElementById('yearSelect').value, 10);
+      state.selectedDate = formatDate(state.year, state.month, 1);
+      saveState();
+      renderAll();
+    }
+
+    function handleDatePickerChange(val) {
+      if (!val) return;
+      const [y, m, d] = val.split('-').map(Number);
+      state.year = y;
+      state.month = m - 1;
+      state.selectedDate = val;
+      saveState();
+      renderAll();
+    }
+
+    function shiftDay(delta) {
+      const [y, m, d] = state.selectedDate.split('-').map(Number);
+      const dt = new Date(y, m - 1, d + delta);
+      state.year = dt.getFullYear();
+      state.month = dt.getMonth();
+      state.selectedDate = formatDate(state.year, state.month, dt.getDate());
+      saveState();
+      renderAll();
+    }
+
+    function jumpToToday() {
+      const now = new Date();
+      state.year = now.getFullYear();
+      state.month = now.getMonth();
+      state.selectedDate = formatDate(state.year, state.month, now.getDate());
+      saveState();
+      renderAll();
+    }
+
+    function scrollToExcelSheet() {
+      document.getElementById('liveExcelSection').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const box = document.getElementById('toastBox');
+      document.getElementById('toastText').textContent = msg;
+      box.classList.remove('hidden');
+      box.classList.add('flex');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        box.classList.add('hidden');
+        box.classList.remove('flex');
+      }, 2800);
+    }
+
+    window.onload = function() {
+      const yearSelect = document.getElementById('yearSelect');
+      const curY = new Date().getFullYear();
+      for (let y = curY - 2; y <= curY + 2; y++) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        yearSelect.appendChild(opt);
+      }
+      loadState();
+      renderAll();
+    };
+  </script>
+</body>
+</html>
